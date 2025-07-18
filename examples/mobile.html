@@ -120,6 +120,17 @@
                 flex-wrap: wrap !important;
                 gap: 0.5rem !important;
             }
+
+            /* Forçar wrap na div dos tabs do modal quando ultrapassar a tela no mobile */
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300.dark>main>div>div>div.modal-mask.skip-context-menu.dark>div>div>form>div.tabs-container.dark>div {
+                flex-wrap: wrap !important;
+                gap: 0.5rem !important;
+            }
+
+            /* Diminuir padding do form do modal no mobile */
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300.dark>main>div>div>div.modal-mask.skip-context-menu.dark>div>div>form {
+                padding: 1rem !important;
+            }
         }
 
         .navbar-item-indicator {
