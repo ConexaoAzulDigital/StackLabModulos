@@ -1,19 +1,19 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="light">
+<html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Layout com Navbar Inferior</title>
-    
+
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Remix Icons via CDN -->
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-    
+
     <script>
         tailwind.config = {
-            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
@@ -26,72 +26,54 @@
     </script>
 
     <style>
-        /* Detecta preferência de modo escuro do sistema */
-        @media (prefers-color-scheme: dark) {
-            html.light:not(.override) {
-                color-scheme: dark;
-                class: dark;
+        /* Espaçamento forçado para o conteúdo principal - apenas mobile */
+        @media (max-width: 768px) {
+            body {
+                padding-bottom: 120px !important;
+            }
+
+            /* Adicionar padding-bottom ao conteúdo principal para afastar da navbar */
+            #app {
+                padding-bottom: 50px !important;
+            }
+
+            /* Garantir que o conteúdo principal tenha espaço adequado */
+            #app>div.flex.flex-wrap.app-wrapper {
+                padding-bottom: 50px !important;
             }
         }
-        
-        /* Espaçamento forçado para o conteúdo principal */
-        body {
-            padding-top: 60px !important; /* Valor maior para garantir espaço suficiente */
-            padding-bottom: 70px !important;
-        }
-        
+
         @media (min-width: 768px) {
             body {
                 padding-top: 0 !important;
                 padding-bottom: 0 !important;
             }
         }
-        
+
         /* Ajustes específicos para o app */
         #app {
             margin-top: 0 !important;
         }
-        
+
         .navbar-item-indicator {
             height: 3px;
             transition: all 0.3s ease;
         }
-        
+
         .navbar-container {
             border-radius: 0;
             box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease;
         }
-        
-        /* Estilo da barra de navegação em modo claro/escuro */
-        .dark .navbar-container {
-            background-color: #57B0FF;
-            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-        }
     </style>
 </head>
-<body class="bg-gray-100 dark:bg-gray-900">
-    <!-- Header fixo no topo - apenas mobile -->
-    <header class="fixed top-0 left-0 w-full py-3 z-[9999] bg-transparent md:hidden">
-        <div class="container mx-auto px-4 flex items-center">
-            <div class="flex items-center">
-                <div class="flex-shrink-0 mr-3">
-                    <!-- Favicon com borda arredondada -->
-                    <div class="w-8 h-8 rounded-full bg-navblue flex items-center justify-center overflow-hidden shadow-sm">
-                        <i class="ri-chat-1-fill text-white text-lg"></i>
-                    </div>
-                </div>
-                <div>
-                    <!-- Título do site -->
-                    <h1 class="text-lg font-semibold text-gray-800 dark:text-white">Chatwoot</h1>
-                </div>
-            </div>
-        </div>
-    </header>
+
+<body class="bg-gray-100">
+
 
     <!-- Script para esconder o <aside> em dispositivos móveis -->
     <script data-name="Mobile">
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             function hideAsideOnMobile() {
                 const asideSelector = '#app > div.flex.flex-wrap.app-wrapper.dark\\:text-slate-300 > aside';
                 const asideElement = document.querySelector(asideSelector);
@@ -109,81 +91,84 @@
             function applySpacing() {
                 if (window.innerWidth <= 768) {
                     // Aplicar ao body
-                    document.body.style.paddingTop = '60px';
-                    document.body.style.paddingBottom = '70px';
-                    
+                    document.body.style.paddingBottom = '120px';
+
                     // Procurar elementos filhos diretos do body para aplicar margem
                     Array.from(document.body.children).forEach(child => {
-                        if (child.tagName !== 'HEADER' && child.tagName !== 'SCRIPT' && 
+                        if (child.tagName !== 'SCRIPT' &&
                             child.tagName !== 'DIV' && !child.classList.contains('fixed')) {
-                            child.style.marginTop = '60px';
+                            child.style.marginTop = '0';
                         }
                     });
-                    
+
                     // Encontra e ajusta o elemento app
                     const appElement = document.getElementById('app');
                     if (appElement) {
                         const computedStyle = window.getComputedStyle(appElement);
                         if (computedStyle.position === 'fixed' || computedStyle.position === 'absolute') {
-                            appElement.style.top = '60px';
+                            appElement.style.top = '0';
                         }
+                        // Adicionar padding-bottom ao app
+                        appElement.style.paddingBottom = '50px';
+                    }
+
+                    // Adicionar padding-bottom ao wrapper principal
+                    const appWrapper = document.querySelector('#app > div.flex.flex-wrap.app-wrapper');
+                    if (appWrapper) {
+                        appWrapper.style.paddingBottom = '50px';
                     }
                 } else {
-                    document.body.style.paddingTop = '';
+                    // Desktop: remover todos os paddings customizados
                     document.body.style.paddingBottom = '';
+                    document.body.style.paddingTop = '';
+
+                    // Remover padding-bottom em desktop
+                    const appElement = document.getElementById('app');
+                    if (appElement) {
+                        appElement.style.paddingBottom = '';
+                        appElement.style.paddingTop = '';
+                    }
+                    const appWrapper = document.querySelector('#app > div.flex.flex-wrap.app-wrapper');
+                    if (appWrapper) {
+                        appWrapper.style.paddingBottom = '';
+                        appWrapper.style.paddingTop = '';
+                    }
                 }
             }
 
             hideAsideOnMobile();
             applySpacing();
-            
-            window.addEventListener('resize', function() {
+
+            window.addEventListener('resize', function () {
                 hideAsideOnMobile();
                 applySpacing();
             });
-            
+
             // Aplicar repetidamente para garantir que os estilos não sejam sobrescritos
-            const interval = setInterval(function() {
+            const interval = setInterval(function () {
                 hideAsideOnMobile();
                 applySpacing();
             }, 200);
-            
-            setTimeout(function() {
+
+            setTimeout(function () {
                 clearInterval(interval);
                 setInterval(applySpacing, 1000);
             }, 5000);
         });
     </script>
 
-    <!-- Script para modo escuro -->
-    <script data-name="DarkMode">
-        document.addEventListener('DOMContentLoaded', function() {
-            // Verifica se o modo escuro é preferido pelo sistema
-            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                document.documentElement.classList.add('dark');
-            }
-            
-            // Observa mudanças na preferência de cor do sistema
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-                if (event.matches) {
-                    document.documentElement.classList.add('dark');
-                } else {
-                    document.documentElement.classList.remove('dark');
-                }
-            });
-        });
-    </script>
+
 
     <!-- Script para navegação -->
     <script data-name="Navigation">
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // Função para extrair o ID da conta da URL atual
             function getAccountId() {
                 const urlPath = window.location.pathname;
                 const matches = urlPath.match(/\/app\/accounts\/(\d+)/);
                 return matches ? matches[1] : null;
             }
-            
+
             // Função para navegar para a rota específica
             function navigateTo(route) {
                 const accountId = getAccountId();
@@ -192,7 +177,7 @@
                     window.location.href = baseUrl + route;
                 }
             }
-            
+
             // Mapeia as rotas para cada item do menu
             const routes = [
                 'dashboard',            // Conversas
@@ -201,33 +186,33 @@
                 'reports/overview',     // Relatórios
                 'settings/general'      // Ajustes
             ];
-            
+
             // Adiciona evento de clique aos itens do menu
             document.querySelectorAll('.navbar-item').forEach((item, index) => {
-                item.addEventListener('click', function() {
+                item.addEventListener('click', function () {
                     // Remove a classe active de todos
                     document.querySelectorAll('.navbar-item').forEach(navItem => {
                         navItem.classList.remove('active');
                     });
-                    
+
                     // Adiciona a classe active ao item clicado
                     this.classList.add('active');
-                    
+
                     // Navega para a rota correspondente
                     navigateTo(routes[index]);
                 });
             });
-            
+
             // Define o item ativo com base na URL atual
             const currentPath = window.location.pathname;
             routes.forEach((route, index) => {
-                if (currentPath.endsWith(route) || 
-                   (route === 'dashboard' && currentPath.endsWith('/app/accounts/' + getAccountId() + '/'))) {
+                if (currentPath.endsWith(route) ||
+                    (route === 'dashboard' && currentPath.endsWith('/app/accounts/' + getAccountId() + '/'))) {
                     const navItems = document.querySelectorAll('.navbar-item');
                     navItems.forEach(item => {
                         item.classList.remove('active');
                     });
-                    
+
                     if (navItems[index]) {
                         navItems[index].classList.add('active');
                     }
@@ -236,9 +221,144 @@
         });
     </script>
 
+    <!-- Script para customizar botão de voltar -->
+    <script data-name="BackButton">
+        document.addEventListener('DOMContentLoaded', function () {
+            function customizeBackButton() {
+                // Aplicar apenas no mobile
+                if (window.innerWidth > 768) {
+                    return;
+                }
+
+                const backButtonSelector = '#app > div.flex.flex-wrap.app-wrapper.dark\\:text-slate-300 > main > section > div.conversation-details-wrap.bg-n-background > div.flex.flex-col.items-center.justify-between.px-4.py-2.border-b.bg-n-background.border-n-weak.md\\:flex-row > div > div.flex.items-center.justify-start.max-w-full.min-w-0.w-fit > button';
+
+                const backButton = document.querySelector(backButtonSelector);
+                if (backButton && !backButton.dataset.customized) {
+                    backButton.dataset.customized = 'true';
+
+                    // Limpar conteúdo existente
+                    backButton.innerHTML = '';
+
+                    // Adicionar ícone SVG de voltar
+                    const svgIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svgIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                    svgIcon.setAttribute('fill', 'none');
+                    svgIcon.setAttribute('viewBox', '0 0 24 24');
+                    svgIcon.setAttribute('stroke', 'currentColor');
+                    svgIcon.style.width = '20px';
+                    svgIcon.style.height = '20px';
+
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('stroke-linecap', 'round');
+                    path.setAttribute('stroke-linejoin', 'round');
+                    path.setAttribute('stroke-width', '2');
+                    path.setAttribute('d', 'M15 19l-7-7 7-7');
+
+                    svgIcon.appendChild(path);
+                    backButton.appendChild(svgIcon);
+
+                    // Aplicar estilos inline para garantir
+                    backButton.style.display = 'flex';
+                    backButton.style.alignItems = 'center';
+                    backButton.style.justifyContent = 'center';
+                    backButton.style.width = '40px';
+                    backButton.style.height = '40px';
+                    backButton.style.borderRadius = '50%';
+                    backButton.style.backgroundColor = 'transparent';
+                    backButton.style.border = 'none';
+                    backButton.style.padding = '0';
+                    backButton.style.margin = '0';
+                }
+            }
+
+            // Executar imediatamente
+            customizeBackButton();
+
+            // Observer para detectar quando o botão é adicionado ao DOM
+            const observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    if (mutation.addedNodes.length) {
+                        customizeBackButton();
+                    }
+                });
+            });
+
+            // Observar mudanças no body
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+
+            // Executar periodicamente para garantir
+            setInterval(customizeBackButton, 1000);
+
+            // Adicionar listener para resize
+            window.addEventListener('resize', function () {
+                customizeBackButton();
+            });
+        });
+    </script>
+
+    <!-- Script para customizar botão IA -->
+    <script data-name="AIButton">
+        document.addEventListener('DOMContentLoaded', function () {
+            function customizeAIButton() {
+                // Aplicar apenas no mobile
+                if (window.innerWidth > 768) {
+                    return;
+                }
+
+                const aiButtonSelector = '#app > div.flex.flex-wrap.app-wrapper.dark\\:text-slate-300 > main > section > div.conversation-details-wrap.bg-n-background > div.flex.h-full.min-h-0.m-0 > div > div.conversation-footer.bg-n-background > div > div.flex.justify-between.p-3 > div.left-wrap > div:nth-child(6) > div > div > button';
+
+                const aiButton = document.querySelector(aiButtonSelector);
+                if (aiButton && !aiButton.dataset.customized) {
+                    aiButton.dataset.customized = 'true';
+
+                    // Alterar o texto para "IA"
+                    aiButton.textContent = 'IA';
+
+                    // Manter a funcionalidade original do botão
+                    const originalOnClick = aiButton.onclick;
+                    const originalAddEventListener = aiButton.addEventListener;
+
+                    // Preservar qualquer evento existente
+                    if (originalOnClick) {
+                        aiButton.onclick = originalOnClick;
+                    }
+                }
+            }
+
+            // Executar imediatamente
+            customizeAIButton();
+
+            // Observer para detectar quando o botão é adicionado ao DOM
+            const observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    if (mutation.addedNodes.length) {
+                        customizeAIButton();
+                    }
+                });
+            });
+
+            // Observar mudanças no body
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+
+            // Executar periodicamente para garantir
+            setInterval(customizeAIButton, 1000);
+
+            // Adicionar listener para resize
+            window.addEventListener('resize', function () {
+                customizeAIButton();
+            });
+        });
+    </script>
+
     <!-- Navbar Inferior - Visível apenas em dispositivos móveis (menor que md:768px) -->
     <div class="fixed bottom-0 w-full md:hidden z-[9999]">
-        <nav class="navbar-container bg-navblue dark:bg-navblue mx-auto max-w-lg shadow-lg">
+        <nav class="navbar-container bg-navblue mx-auto max-w-lg shadow-lg">
             <ul class="flex justify-between items-center px-0 py-2">
                 <li class="navbar-item flex flex-col items-center justify-center w-1/5 relative">
                     <div class="navbar-item-indicator w-8 bg-white absolute -top-2 rounded-full opacity-0"></div>
@@ -275,44 +395,96 @@
         .navbar-item.active span {
             color: #ffffff !important;
         }
-        
+
         .navbar-item.active .navbar-item-indicator {
             opacity: 1;
             animation: indicatorIn 0.3s ease forwards;
         }
-        
+
         @keyframes indicatorIn {
-            0% { transform: translateY(-5px); opacity: 0; width: 0; }
-            100% { transform: translateY(0); opacity: 1; width: 8px; }
+            0% {
+                transform: translateY(-5px);
+                opacity: 0;
+                width: 0;
+            }
+
+            100% {
+                transform: translateY(0);
+                opacity: 1;
+                width: 8px;
+            }
         }
-        
+
         .navbar-item {
             cursor: pointer;
             position: relative;
             transform: translate3d(0, 0, 0);
         }
-        
+
         .navbar-item i,
         .navbar-item span {
             transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1.0);
         }
-        
+
         .navbar-item-indicator {
             transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1.0);
         }
-        
+
         .navbar-item i {
             margin-bottom: -2px;
         }
-        
+
         .navbar-item span {
             margin-top: -2px;
         }
-        
+
         /* Animação ao clicar */
         .navbar-item:active {
             transform: scale(0.95);
         }
+
+        @media (max-width: 768px) {
+
+            /* Botão de voltar */
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300>main>section>div.conversation-details-wrap.bg-n-background>div.flex.flex-col.items-center.justify-between.px-4.py-2.border-b.bg-n-background.border-n-weak.md\:flex-row>div>div.flex.items-center.justify-start.max-w-full.min-w-0.w-fit>button {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: 40px !important;
+                height: 40px !important;
+                border-radius: 50% !important;
+                background-color: transparent !important;
+                border: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300>main>section>div.conversation-details-wrap.bg-n-background>div.flex.flex-col.items-center.justify-between.px-4.py-2.border-b.bg-n-background.border-n-weak.md\:flex-row>div>div.flex.items-center.justify-start.max-w-full.min-w-0.w-fit>button::before {
+                content: '' !important;
+                width: 20px !important;
+                height: 20px !important;
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M15 19l-7-7 7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+                background-size: contain !important;
+                background-repeat: no-repeat !important;
+                background-position: center !important;
+            }
+
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300>main>section>div.conversation-details-wrap.bg-n-background>div.flex.flex-col.items-center.justify-between.px-4.py-2.border-b.bg-n-background.border-n-weak.md\:flex-row>div>div.flex.items-center.justify-start.max-w-full.min-w-0.w-fit>button>* {
+                display: none !important;
+            }
+
+            /* Botão IA */
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300>main>section>div.conversation-details-wrap.bg-n-background>div.flex.h-full.min-h-0.m-0>div>div.conversation-footer.bg-n-background>div>div.flex.justify-between.p-3>div.left-wrap>div:nth-child(6)>div>div>button {
+                font-weight: 500 !important;
+            }
+
+            /* Font-size reduzido dos elementos do botão na conversation-footer */
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300>main>section>div.conversation-details-wrap.bg-n-background>div.flex.h-full.min-h-0.m-0>div>div.conversation-footer.bg-n-background>div>div.flex.justify-between.h-\[3\.25rem\].gap-2.ltr\:pl-3.rtl\:pr-3>button.flex.items-center.w-auto.h-8.p-1.transition-all.border.rounded-full.bg-n-alpha-2.group.relative.duration-300.ease-in-out.z-0.mt-3>div:nth-child(1),
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300>main>section>div.conversation-details-wrap.bg-n-background>div.flex.h-full.min-h-0.m-0>div>div.conversation-footer.bg-n-background>div>div.flex.justify-between.h-\[3\.25rem\].gap-2.ltr\:pl-3.rtl\:pr-3>button.flex.items-center.w-auto.h-8.p-1.transition-all.border.rounded-full.bg-n-alpha-2.group.relative.duration-300.ease-in-out.z-0.mt-3>div:nth-child(2) {
+                font-size: 0.75rem !important;
+            }
+        }
     </style>
 </body>
+
 </html>
