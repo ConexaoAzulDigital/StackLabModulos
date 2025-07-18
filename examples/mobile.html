@@ -108,6 +108,18 @@
                 padding: 1rem !important;
                 order: 1 !important;
             }
+
+            /* Form ocupar toda a altura da tela no mobile */
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300.dark>main>div>div>div.flex-1.overflow-auto.dark>form {
+                height: 100vh !important;
+                min-height: 100vh !important;
+            }
+
+            /* Forçar wrap na div dos tabs quando ultrapassar a tela no mobile */
+            #app>div.flex.flex-wrap.app-wrapper.dark\:text-slate-300.dark>main>div>div>div.flex-1.overflow-auto.dark>form>div.tabs-container.dark>div {
+                flex-wrap: wrap !important;
+                gap: 0.5rem !important;
+            }
         }
 
         .navbar-item-indicator {
