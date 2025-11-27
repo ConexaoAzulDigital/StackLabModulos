@@ -1,0 +1,98 @@
+<script>
+(function () {
+  const MODULE_KEY = "StackLab_OcultarAbaTodos_permissions_v1";
+  if (window[MODULE_KEY]) return;
+  window[MODULE_KEY] = true;
+
+  console.log("[StackLab:OcultarAba] iniciado...");
+
+  async function fetchUserProfile() {
+    try {
+      const resp = await axios.get("/api/v1/profile");
+      console.log("[StackLab:OcultarAba] RAW PROFILE:", resp);
+
+      return resp?.data || null;
+    } catch (e) {
+      console.error("[StackLab:OcultarAba] erro ao buscar /profile", e);
+      return null;
+    }
+  }
+
+  function isAdminByPermissions(profile) {
+    if (!profile) {
+      console.log("[StackLab:OcultarAba] profile NULL → ocultar");
+      return false;
+    }
+
+    const currentAccountId = profile.account_id;
+    console.log("[StackLab:OcultarAba] Conta ativa:", currentAccountId);
+
+    const accounts = profile.accounts || [];
+    console.log("[StackLab:OcultarAba] Accounts:", accounts);
+
+    const currentAcc = accounts.find(acc => acc.id === currentAccountId);
+
+    if (!currentAcc) {
+      console.warn("[StackLab:OcultarAba] Conta ativa não encontrada no array accounts → fallback ocultar");
+      return false;
+    }
+
+    console.log("[StackLab:OcultarAba] Conta atual encontrada:", currentAcc);
+
+    const perms = currentAcc.permissions || [];
+    console.log("[StackLab:OcultarAba] Permissions da conta atual:", perms);
+
+    const isAdmin = perms.includes("administrator");
+
+    console.log("[StackLab:OcultarAba] isAdmin =", isAdmin);
+
+    return isAdmin;
+  }
+
+  function ocultarAbaTodos() {
+    const labels = ["Todos", "Todos os Contatos", "All Contacts"];
+
+    const uls = document.querySelectorAll("ul");
+    uls.forEach(ul => {
+      ul.querySelectorAll("a").forEach(a => {
+        const t = (a.innerText || "").trim();
+        labels.forEach(lbl => {
+          if (t.startsWith(lbl)) {
+            const li = a.closest("li");
+            if (li) {
+              li.style.display = "none";
+              console.log("[StackLab:OcultarAba] ocultado:", t);
+            }
+          }
+        });
+      });
+    });
+  }
+
+  function startObserver(shouldHide) {
+    const root = document.body;
+
+    const obs = new MutationObserver(() => {
+      if (shouldHide) ocultarAbaTodos();
+    });
+
+    obs.observe(root, { childList: true, subtree: true });
+  }
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    console.log("[StackLab:OcultarAba] DOM Loaded");
+
+    const profile = await fetchUserProfile();
+    const isAdmin = isAdminByPermissions(profile);
+
+    if (!isAdmin) {
+      console.log("[StackLab:OcultarAba] Não é admin → ocultando aba");
+      ocultarAbaTodos();
+      startObserver(true);
+    } else {
+      console.log("[StackLab:OcultarAba] É admin → NÃO ocultar aba");
+      startObserver(false);
+    }
+  });
+})();
+</script>
