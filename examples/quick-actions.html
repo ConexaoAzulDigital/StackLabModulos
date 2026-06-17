@@ -1,0 +1,762 @@
+<!--
+  MagicaChat-QuickActions
+  ========================
+  Produto: Mágica Chat — Conexão Azul Digital (conexaoazul.com)
+  Instância: magicachat.conexaoazul.com
+
+  O que faz:
+  - Barra flutuante centralizada na parte inferior com 4 ações rápidas
+    para a conversa aberta: Resolver, Transferir, Urgente, Kanban
+  - Aparece apenas quando uma conversa está aberta (URL contém /conversations/:id)
+  - Detecta troca de rota via MutationObserver + hashchange/popstate
+  - Chama a API REST do Chatwoot com window.axios (disponível globalmente)
+  - Toast de feedback inline sem depender de scripts externos
+  - Picker de agente em popover que abre para cima, lista scrollável
+  - Respeita prefers-reduced-motion
+
+  Instalação:
+  1. Acesse: magicachat.conexaoazul.com/super_admin/dashboard_scripts
+  2. Clique em "New Script"
+  3. Nome: MagicaChat-QuickActions
+  4. Cole TODO o conteúdo da tag <script> abaixo (sem a tag em si)
+  5. Habilite e salve
+-->
+<script data-name="MagicaChat-QuickActions">
+(function () {
+  'use strict';
+
+  // ─── Idempotência ───────────────────────────────────────────────────────────
+  const KEY = 'MagicaChat_QuickActions_v1';
+  if (window[KEY]) return;
+  window[KEY] = true;
+
+  // ─── Brand Tokens ────────────────────────────────────────────────────────────
+  const C = {
+    indigo950:  '#0B1133',
+    indigo800:  '#1E2D78',
+    cyan500:    '#2DD2E1',
+    cyan400:    '#5BDDE9',
+    neutral800: '#1F2438',
+    neutral700: '#353B52',
+    neutral600: '#525A75',
+    neutral300: '#B6BCCB',
+    success:    '#16A571',
+    danger:     '#DC4848',
+    warning:    '#E8A23A',
+    white:      '#FFFFFF',
+  };
+
+  // ─── Reduced Motion ──────────────────────────────────────────────────────────
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const TRANSITION = prefersReducedMotion ? 'none' : 'all 150ms ease';
+  const TOAST_TRANSITION = prefersReducedMotion ? 'none' : 'opacity 220ms ease, transform 220ms ease';
+
+  // ─── State ───────────────────────────────────────────────────────────────────
+  let currentAccountId = null;
+  let currentConvId    = null;
+  let isUrgent         = false;
+  let agentPickerOpen  = false;
+  let cachedAgents     = null;
+
+  // ─── DOM references ──────────────────────────────────────────────────────────
+  let barEl        = null;
+  let pickerEl     = null;
+  let urgentBtnEl  = null;
+
+  // ─── Helpers: store & auth ───────────────────────────────────────────────────
+  function getStore() {
+    return (
+      window.__vue__?.$store ||
+      window.bus?.$store ||
+      null
+    );
+  }
+
+  function getAuthToken() {
+    try {
+      const store = getStore();
+      const user  = store?.getters?.getCurrentUser;
+      return user?.access_token ?? null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function getAxiosHeaders() {
+    const token = getAuthToken();
+    return token ? { 'api_access_token': token } : {};
+  }
+
+  // ─── Helpers: URL parsing ─────────────────────────────────────────────────────
+  function parseConversationFromURL() {
+    const m = window.location.pathname.match(
+      /\/app\/accounts\/(\d+)\/conversations\/(\d+)/
+    );
+    if (!m) return null;
+    return { accountId: m[1], convId: m[2] };
+  }
+
+  // ─── Toast ───────────────────────────────────────────────────────────────────
+  function toast(msg, type) {
+    // type: 'success' | 'error' | 'info' | 'warning'
+    const palette = {
+      success: { bg: C.success,  icon: '✓' },
+      error:   { bg: C.danger,   icon: '✕' },
+      warning: { bg: C.warning,  icon: '⚠' },
+      info:    { bg: C.indigo800, icon: 'ℹ' },
+    };
+    const { bg, icon } = palette[type] || palette.info;
+
+    const el = document.createElement('div');
+    el.setAttribute('role', 'alert');
+    el.setAttribute('aria-live', 'polite');
+    el.style.cssText = [
+      'position:fixed',
+      'bottom:148px',
+      'left:50%',
+      'transform:translateX(-50%) translateY(8px)',
+      `background:${bg}`,
+      'color:#fff',
+      'padding:10px 18px',
+      'border-radius:10px',
+      'font-family:Inter,system-ui,sans-serif',
+      'font-size:13px',
+      'font-weight:500',
+      'display:flex',
+      'align-items:center',
+      'gap:8px',
+      'box-shadow:0 4px 20px rgba(0,0,0,0.35)',
+      'z-index:10010',
+      'opacity:0',
+      `transition:${TOAST_TRANSITION}`,
+      'white-space:nowrap',
+      'pointer-events:none',
+    ].join(';');
+    el.innerHTML = `<span style="font-size:15px;line-height:1">${icon}</span><span>${msg}</span>`;
+    document.body.appendChild(el);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.style.opacity  = '1';
+        el.style.transform = 'translateX(-50%) translateY(0)';
+      });
+    });
+
+    setTimeout(() => {
+      el.style.opacity   = '0';
+      el.style.transform = 'translateX(-50%) translateY(8px)';
+      setTimeout(() => el.remove(), 250);
+    }, 3500);
+  }
+
+  // ─── API calls ───────────────────────────────────────────────────────────────
+  async function resolveConversation() {
+    if (!currentAccountId || !currentConvId) return;
+    try {
+      await window.axios.patch(
+        `/api/v1/accounts/${currentAccountId}/conversations/${currentConvId}`,
+        { status: 'resolved' },
+        { headers: getAxiosHeaders() }
+      );
+      toast('Conversa resolvida com sucesso!', 'success');
+      // After a short delay, the bar hides itself as the URL changes
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Erro ao resolver conversa.';
+      toast(msg, 'error');
+    }
+  }
+
+  async function assignAgent(assigneeId) {
+    if (!currentAccountId || !currentConvId) return;
+    try {
+      await window.axios.patch(
+        `/api/v1/accounts/${currentAccountId}/conversations/${currentConvId}/assignments`,
+        { assignee_id: assigneeId },
+        { headers: getAxiosHeaders() }
+      );
+      toast('Conversa transferida com sucesso!', 'success');
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Erro ao transferir conversa.';
+      toast(msg, 'error');
+    }
+  }
+
+  async function togglePriority() {
+    if (!currentAccountId || !currentConvId) return;
+    const newPriority = isUrgent ? null : 'high';
+    try {
+      await window.axios.patch(
+        `/api/v1/accounts/${currentAccountId}/conversations/${currentConvId}`,
+        { priority: newPriority },
+        { headers: getAxiosHeaders() }
+      );
+      isUrgent = !isUrgent;
+      updateUrgentButton();
+      toast(
+        isUrgent ? 'Marcado como urgente!' : 'Prioridade removida.',
+        isUrgent ? 'warning' : 'info'
+      );
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Erro ao alterar prioridade.';
+      toast(msg, 'error');
+    }
+  }
+
+  function goToKanban() {
+    if (!currentAccountId) return;
+    window.location.href = `/app/accounts/${currentAccountId}/kanban`;
+  }
+
+  // ─── Fetch agents ─────────────────────────────────────────────────────────────
+  async function fetchAgents() {
+    if (cachedAgents) return cachedAgents;
+
+    // Try Vuex first (no network cost)
+    try {
+      const store  = getStore();
+      const agents = store?.getters?.['agents/getAgents'];
+      if (Array.isArray(agents) && agents.length > 0) {
+        cachedAgents = agents;
+        return cachedAgents;
+      }
+    } catch (_) { /* fall through */ }
+
+    // Fallback: REST API
+    try {
+      const resp = await window.axios.get(
+        `/api/v1/accounts/${currentAccountId}/agents`,
+        { headers: getAxiosHeaders() }
+      );
+      cachedAgents = resp.data || [];
+      return cachedAgents;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ─── Current conversation priority ──────────────────────────────────────────
+  async function fetchConversationState() {
+    if (!currentAccountId || !currentConvId) return;
+
+    // Try Vuex conversation store first
+    try {
+      const store = getStore();
+      const conv  = store?.getters?.['conversations/getConversationById']?.(
+        Number(currentConvId)
+      );
+      if (conv) {
+        isUrgent = conv.priority === 'high';
+        updateUrgentButton();
+        return;
+      }
+    } catch (_) { /* fall through */ }
+
+    // Fallback: REST API
+    try {
+      const resp = await window.axios.get(
+        `/api/v1/accounts/${currentAccountId}/conversations/${currentConvId}`,
+        { headers: getAxiosHeaders() }
+      );
+      isUrgent = (resp.data?.priority === 'high');
+      updateUrgentButton();
+    } catch (_) {
+      isUrgent = false;
+      updateUrgentButton();
+    }
+  }
+
+  // ─── Urgent button visual state ──────────────────────────────────────────────
+  function updateUrgentButton() {
+    if (!urgentBtnEl) return;
+    if (isUrgent) {
+      urgentBtnEl.style.background = C.danger;
+      urgentBtnEl.style.color      = C.white;
+      urgentBtnEl.title            = 'Remover urgência';
+    } else {
+      urgentBtnEl.style.background = C.neutral800;
+      urgentBtnEl.style.color      = C.white;
+      urgentBtnEl.title            = 'Marcar como urgente';
+    }
+  }
+
+  // ─── Agent Picker Popover ─────────────────────────────────────────────────────
+  function closeAgentPicker() {
+    if (pickerEl) {
+      pickerEl.remove();
+      pickerEl = null;
+    }
+    agentPickerOpen = false;
+  }
+
+  async function toggleAgentPicker(anchorEl) {
+    if (agentPickerOpen) {
+      closeAgentPicker();
+      return;
+    }
+    agentPickerOpen = true;
+
+    // Build popover
+    pickerEl = document.createElement('div');
+    pickerEl.id = 'mc-qa-agent-picker';
+    pickerEl.setAttribute('role', 'listbox');
+    pickerEl.setAttribute('aria-label', 'Selecionar agente');
+    pickerEl.style.cssText = [
+      'position:fixed',
+      `background:${C.neutral800}`,
+      'border:1px solid rgba(45,210,225,0.18)',
+      'border-radius:10px',
+      'box-shadow:0 8px 24px rgba(0,0,0,0.3)',
+      'z-index:10011',
+      'width:220px',
+      'max-height:240px',
+      'overflow-y:auto',
+      'overflow-x:hidden',
+      'padding:6px',
+      'font-family:Inter,system-ui,sans-serif',
+    ].join(';');
+
+    // Scrollbar styling
+    const scrollStyle = document.createElement('style');
+    scrollStyle.id = 'mc-qa-picker-scroll-style';
+    scrollStyle.textContent = `
+      #mc-qa-agent-picker::-webkit-scrollbar { width: 4px; }
+      #mc-qa-agent-picker::-webkit-scrollbar-track { background: transparent; }
+      #mc-qa-agent-picker::-webkit-scrollbar-thumb { background: rgba(45,210,225,0.3); border-radius: 4px; }
+    `;
+    if (!document.getElementById('mc-qa-picker-scroll-style')) {
+      document.head.appendChild(scrollStyle);
+    }
+
+    // Loading state
+    const loadingEl = document.createElement('div');
+    loadingEl.style.cssText = `color:${C.neutral300};font-size:13px;padding:12px 10px;text-align:center;`;
+    loadingEl.textContent = 'Carregando agentes…';
+    pickerEl.appendChild(loadingEl);
+
+    document.body.appendChild(pickerEl);
+    positionPickerAbove(anchorEl);
+
+    // Fetch agents
+    const agents = await fetchAgents();
+
+    // Clear loading
+    pickerEl.innerHTML = '';
+
+    if (!agents || agents.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = `color:${C.neutral300};font-size:13px;padding:12px 10px;text-align:center;`;
+      empty.textContent = 'Nenhum agente encontrado.';
+      pickerEl.appendChild(empty);
+    } else {
+      agents.forEach(agent => {
+        const item = document.createElement('div');
+        item.setAttribute('role', 'option');
+        item.setAttribute('tabindex', '0');
+        item.style.cssText = [
+          'display:flex',
+          'align-items:center',
+          'gap:10px',
+          'padding:8px 10px',
+          'border-radius:7px',
+          'cursor:pointer',
+          `color:${C.white}`,
+          'font-size:13px',
+          `transition:${TRANSITION}`,
+        ].join(';');
+
+        // Avatar
+        const avatar = document.createElement('div');
+        avatar.style.cssText = [
+          'width:28px',
+          'height:28px',
+          'border-radius:50%',
+          `background:${C.indigo800}`,
+          `color:${C.cyan500}`,
+          'display:flex',
+          'align-items:center',
+          'justify-content:center',
+          'font-size:11px',
+          'font-weight:700',
+          'flex-shrink:0',
+          'overflow:hidden',
+        ].join(';');
+
+        if (agent.avatar_url) {
+          const img = document.createElement('img');
+          img.src    = agent.avatar_url;
+          img.alt    = agent.name || '';
+          img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+          img.onerror = () => {
+            img.remove();
+            avatar.textContent = (agent.name || '?').charAt(0).toUpperCase();
+          };
+          avatar.appendChild(img);
+        } else {
+          avatar.textContent = (agent.name || '?').charAt(0).toUpperCase();
+        }
+
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        nameSpan.textContent = agent.name || `Agente #${agent.id}`;
+
+        item.appendChild(avatar);
+        item.appendChild(nameSpan);
+
+        const handleSelect = () => {
+          closeAgentPicker();
+          assignAgent(agent.id);
+        };
+
+        item.addEventListener('click', handleSelect);
+        item.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleSelect();
+          }
+        });
+        item.addEventListener('mouseenter', () => {
+          item.style.background = C.neutral700;
+        });
+        item.addEventListener('mouseleave', () => {
+          item.style.background = 'transparent';
+        });
+
+        pickerEl.appendChild(item);
+      });
+    }
+
+    // Re-position after content loads
+    positionPickerAbove(anchorEl);
+  }
+
+  function positionPickerAbove(anchorEl) {
+    if (!pickerEl || !anchorEl) return;
+    const rect    = anchorEl.getBoundingClientRect();
+    const ph      = pickerEl.offsetHeight || 200;
+    const top     = rect.top - ph - 10;
+    const centerX = rect.left + rect.width / 2;
+    const left    = Math.max(8, Math.min(centerX - 110, window.innerWidth - 228));
+
+    pickerEl.style.top  = `${Math.max(8, top)}px`;
+    pickerEl.style.left = `${left}px`;
+  }
+
+  // ─── SVG Icons ───────────────────────────────────────────────────────────────
+  const ICONS = {
+    resolver: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`,
+    transferir: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="23 11 21 13 19 11"/><line x1="21" y1="13" x2="21" y2="9"/></svg>`,
+    urgente: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    kanban: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="11" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>`,
+  };
+
+  // ─── Build Bar ────────────────────────────────────────────────────────────────
+  function buildBar() {
+    if (barEl) return; // already built
+
+    // Inject base styles once
+    if (!document.getElementById('mc-qa-styles')) {
+      const style = document.createElement('style');
+      style.id = 'mc-qa-styles';
+      style.textContent = `
+        #mc-quick-actions-bar {
+          position: fixed;
+          bottom: 80px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: ${C.indigo950};
+          border: 1px solid rgba(45, 210, 225, 0.2);
+          border-radius: 40px;
+          padding: 8px 16px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+          z-index: 10005;
+          font-family: Inter, system-ui, sans-serif;
+          opacity: 0;
+          pointer-events: none;
+          ${prefersReducedMotion ? '' : 'transition: opacity 200ms ease, transform 200ms ease;'}
+          ${prefersReducedMotion ? '' : 'transform: translateX(-50%) translateY(6px);'}
+        }
+        #mc-quick-actions-bar.mc-qa-visible {
+          opacity: 1;
+          pointer-events: auto;
+          ${prefersReducedMotion ? '' : 'transform: translateX(-50%) translateY(0);'}
+        }
+        .mc-qa-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          border: none;
+          border-radius: 20px;
+          padding: 8px 14px;
+          font-family: Inter, system-ui, sans-serif;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          white-space: nowrap;
+          ${prefersReducedMotion ? '' : 'transition: all 150ms ease;'}
+          outline: none;
+          line-height: 1;
+        }
+        .mc-qa-btn:focus-visible {
+          box-shadow: 0 0 0 3px rgba(45, 210, 225, 0.5);
+        }
+        .mc-qa-btn:active {
+          ${prefersReducedMotion ? '' : 'transform: scale(0.96);'}
+        }
+        .mc-qa-btn-resolver {
+          background: ${C.cyan500};
+          color: ${C.indigo950};
+        }
+        .mc-qa-btn-resolver:hover {
+          background: ${C.cyan400};
+        }
+        .mc-qa-btn-neutral {
+          background: ${C.neutral800};
+          color: ${C.white};
+        }
+        .mc-qa-btn-neutral:hover {
+          background: ${C.neutral700};
+        }
+        .mc-qa-separator {
+          width: 1px;
+          height: 24px;
+          background: rgba(45, 210, 225, 0.15);
+          flex-shrink: 0;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    barEl = document.createElement('div');
+    barEl.id = 'mc-quick-actions-bar';
+    barEl.setAttribute('role', 'toolbar');
+    barEl.setAttribute('aria-label', 'Ações rápidas da conversa');
+
+    // ── Resolver button
+    const resolverBtn = makeButton({
+      id:        'mc-qa-resolver',
+      label:     'Resolver',
+      icon:      ICONS.resolver,
+      classes:   ['mc-qa-btn', 'mc-qa-btn-resolver'],
+      title:     'Resolver esta conversa',
+      onClick:   resolveConversation,
+    });
+
+    // ── Separator
+    const sep1 = document.createElement('div');
+    sep1.className = 'mc-qa-separator';
+    sep1.setAttribute('aria-hidden', 'true');
+
+    // ── Transferir button
+    const transferBtn = makeButton({
+      id:        'mc-qa-transferir',
+      label:     'Transferir',
+      icon:      ICONS.transferir,
+      classes:   ['mc-qa-btn', 'mc-qa-btn-neutral'],
+      title:     'Transferir para outro agente',
+      onClick:   (e) => {
+        e.stopPropagation();
+        toggleAgentPicker(transferBtn);
+      },
+    });
+
+    // ── Separator
+    const sep2 = document.createElement('div');
+    sep2.className = 'mc-qa-separator';
+    sep2.setAttribute('aria-hidden', 'true');
+
+    // ── Urgente button
+    urgentBtnEl = makeButton({
+      id:        'mc-qa-urgente',
+      label:     'Urgente',
+      icon:      ICONS.urgente,
+      classes:   ['mc-qa-btn', 'mc-qa-btn-neutral'],
+      title:     'Marcar como urgente',
+      onClick:   togglePriority,
+    });
+
+    // ── Separator
+    const sep3 = document.createElement('div');
+    sep3.className = 'mc-qa-separator';
+    sep3.setAttribute('aria-hidden', 'true');
+
+    // ── Kanban button
+    const kanbanBtn = makeButton({
+      id:        'mc-qa-kanban',
+      label:     'Kanban',
+      icon:      ICONS.kanban,
+      classes:   ['mc-qa-btn', 'mc-qa-btn-neutral'],
+      title:     'Abrir quadro Kanban',
+      onClick:   goToKanban,
+    });
+
+    barEl.appendChild(resolverBtn);
+    barEl.appendChild(sep1);
+    barEl.appendChild(transferBtn);
+    barEl.appendChild(sep2);
+    barEl.appendChild(urgentBtnEl);
+    barEl.appendChild(sep3);
+    barEl.appendChild(kanbanBtn);
+
+    document.body.appendChild(barEl);
+
+    // Close picker on outside click
+    document.addEventListener('click', onDocumentClick, true);
+    document.addEventListener('keydown', onDocumentKeydown, true);
+  }
+
+  function makeButton({ id, label, icon, classes, title, onClick }) {
+    const btn = document.createElement('button');
+    btn.id        = id;
+    btn.type      = 'button';
+    btn.title     = title;
+    btn.setAttribute('aria-label', title);
+    btn.className = classes.join(' ');
+    btn.innerHTML = `${icon}<span>${label}</span>`;
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  // ─── Show / Hide bar ──────────────────────────────────────────────────────────
+  function showBar() {
+    if (!barEl) buildBar();
+    // Small RAF delay for CSS transition to fire
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        barEl.classList.add('mc-qa-visible');
+      });
+    });
+  }
+
+  function hideBar() {
+    if (!barEl) return;
+    barEl.classList.remove('mc-qa-visible');
+    closeAgentPicker();
+  }
+
+  // ─── Document-level event handlers ───────────────────────────────────────────
+  function onDocumentClick(e) {
+    if (!agentPickerOpen) return;
+    const picker = document.getElementById('mc-qa-agent-picker');
+    const btn    = document.getElementById('mc-qa-transferir');
+    if (
+      picker && !picker.contains(e.target) &&
+      btn    && !btn.contains(e.target)
+    ) {
+      closeAgentPicker();
+    }
+  }
+
+  function onDocumentKeydown(e) {
+    if (e.key === 'Escape' && agentPickerOpen) {
+      closeAgentPicker();
+    }
+  }
+
+  // ─── Route change detection ───────────────────────────────────────────────────
+  function onRouteChange() {
+    const parsed = parseConversationFromURL();
+
+    if (!parsed) {
+      // Not on a conversation page
+      currentAccountId = null;
+      currentConvId    = null;
+      isUrgent         = false;
+      hideBar();
+      return;
+    }
+
+    const changed = (
+      parsed.accountId !== currentAccountId ||
+      parsed.convId    !== currentConvId
+    );
+
+    currentAccountId = parsed.accountId;
+    currentConvId    = parsed.convId;
+
+    if (changed) {
+      isUrgent    = false;
+      cachedAgents = null; // reset agent cache per account change
+      updateUrgentButton();
+      fetchConversationState();
+    }
+
+    showBar();
+  }
+
+  // ─── Patch history API for SPA navigation ────────────────────────────────────
+  function patchHistory() {
+    const wrap = (method) => {
+      const orig = history[method];
+      history[method] = function (...args) {
+        const result = orig.apply(this, args);
+        window.dispatchEvent(new Event('mc-locationchange'));
+        return result;
+      };
+    };
+    if (!history.__mc_patched__) {
+      wrap('pushState');
+      wrap('replaceState');
+      history.__mc_patched__ = true;
+    }
+  }
+
+  // ─── Wait for Vuex store (async SPA boot) ────────────────────────────────────
+  function waitForStore(callback, maxMs, intervalMs) {
+    const deadline = Date.now() + maxMs;
+    const timer = setInterval(() => {
+      if (getStore()) {
+        clearInterval(timer);
+        callback();
+        return;
+      }
+      if (Date.now() > deadline) {
+        clearInterval(timer);
+        // Proceed anyway — store may not be needed for URL detection
+        callback();
+      }
+    }, intervalMs);
+  }
+
+  // ─── Init ─────────────────────────────────────────────────────────────────────
+  function init() {
+    patchHistory();
+
+    // Listen for SPA navigation
+    window.addEventListener('mc-locationchange', onRouteChange);
+    window.addEventListener('popstate',          onRouteChange);
+    window.addEventListener('hashchange',        onRouteChange);
+
+    // MutationObserver: catches Vue-driven DOM changes that may indicate route change
+    const navObserver = new MutationObserver(() => {
+      // Only re-evaluate if the URL has changed since last check
+      const parsed = parseConversationFromURL();
+      const newId  = parsed ? `${parsed.accountId}/${parsed.convId}` : null;
+      const curId  = currentAccountId ? `${currentAccountId}/${currentConvId}` : null;
+      if (newId !== curId) {
+        onRouteChange();
+      }
+    });
+
+    navObserver.observe(document.body, {
+      childList: true,
+      subtree:   true,
+    });
+
+    // Initial check
+    onRouteChange();
+  }
+
+  // ─── Boot: wait up to 3s for Vuex store ──────────────────────────────────────
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      waitForStore(init, 3000, 200);
+    });
+  } else {
+    waitForStore(init, 3000, 200);
+  }
+
+})();
+</script>
