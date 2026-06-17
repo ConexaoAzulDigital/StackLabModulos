@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MagicaChat — Branding Script</title>
+  </head>
+  <body>
+    <!--
+      MagicaChat Branding Script
+      Cole o bloco <script> abaixo em:
+      Super Admin → Dashboard Scripts → New Script
+
+      O que este script faz:
+        1. Substitui paleta de cores por "Azul Vibrante Moderno"
+        2. Aplica fonte Inter em toda a interface
+        3. Substitui logo e textos "Chatwoot" por "MagicaChat"
+        4. Atualiza favicon e título da página
+        5. Adiciona refinamentos visuais (scrollbar, bordas, sombras)
+    -->
+
+    <script data-name="MagicaChat-Branding">
+      (function () {
+        const MODULE_KEY = 'MagicaChat_Branding_v1';
+        if (window[MODULE_KEY]) return;
+        window[MODULE_KEY] = true;
+
+        // ── 1. Estilos globais ────────────────────────────────────────
+        const styleEl = document.createElement('style');
+        styleEl.id = 'magicachat-branding-styles';
+        styleEl.innerHTML = `
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+          /* ── Paleta MagicaChat ── */
+          :root {
+            --color-woot-50:  #EFF6FF;
+            --color-woot-75:  #DBEAFE;
+            --color-woot-100: #BFDBFE;
+            --color-woot-200: #93C5FD;
+            --color-woot-300: #60A5FA;
+            --color-woot-400: #3B82F6;
+            --color-woot-500: #2563EB;
+            --color-woot-600: #1D4ED8;
+            --color-woot-700: #1E40AF;
+            --color-woot-800: #1E3A8A;
+            --color-woot-900: #172554;
+
+            /* Cores semânticas mapeadas para o azul */
+            --color-primary-medium: 221deg 83% 53%;
+            --color-primary-dark:   221deg 83% 45%;
+            --color-primary-light:  214deg 95% 93%;
+          }
+
+          /* ── Fonte global ── */
+          *, *::before, *::after {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
+              'Segoe UI', Roboto, sans-serif !important;
+            letter-spacing: -0.01em;
+          }
+
+          /* ── Botões primários ── */
+          .button.nice.success,
+          .woot-button,
+          .woot-button--primary,
+          button[class*="primary-"],
+          [class*="button--primary"] {
+            background-color: #2563EB !important;
+            border-color: #2563EB !important;
+            border-radius: 8px !important;
+          }
+
+          .button.nice.success:hover,
+          .woot-button:hover,
+          .woot-button--primary:hover {
+            background-color: #1D4ED8 !important;
+            border-color: #1D4ED8 !important;
+          }
+
+          /* ── Inputs com foco azul ── */
+          input:focus,
+          textarea:focus,
+          select:focus,
+          [contenteditable]:focus {
+            border-color: #2563EB !important;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
+            outline: none !important;
+          }
+
+          /* ── Links ── */
+          a { color: #2563EB !important; }
+          a:hover { color: #1D4ED8 !important; }
+
+          /* ── Badges e pills ── */
+          .badge,
+          [class*="badge--primary"],
+          [class*="label--primary"] {
+            background-color: #2563EB !important;
+            color: #fff !important;
+          }
+
+          /* ── Sidebar primária ── */
+          .primary-sidebar,
+          aside.primary-sidebar {
+            background: linear-gradient(180deg, #1E3A8A 0%, #1D4ED8 100%) !important;
+          }
+
+          .primary-sidebar .sidebar-item--active,
+          .primary-sidebar a.active {
+            background: rgba(255,255,255,0.15) !important;
+            border-radius: 8px !important;
+          }
+
+          /* ── Indicadores / selection ── */
+          ::selection {
+            background: #BFDBFE;
+            color: #1E3A8A;
+          }
+
+          /* ── Scrollbar minimalista ── */
+          ::-webkit-scrollbar          { width: 5px; height: 5px; }
+          ::-webkit-scrollbar-track    { background: transparent; }
+          ::-webkit-scrollbar-thumb    { background: #CBD5E1; border-radius: 4px; }
+          ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+          /* ── Bordas e sombras mais suaves ── */
+          .modal-container,
+          [class*="--modal"],
+          [class*="card"],
+          [class*="panel"],
+          .dropdown-pane {
+            border-radius: 12px !important;
+            box-shadow: 0 8px 24px rgba(30, 58, 138, 0.12) !important;
+          }
+
+          /* ── Item de conversa em hover ── */
+          .conversation-item:hover,
+          [class*="conversation-item"]:hover {
+            background: #EFF6FF !important;
+            border-left: 3px solid #2563EB !important;
+          }
+
+          /* ── Ocultar "Powered by Chatwoot" se presente ── */
+          [href*="chatwoot.com"],
+          [class*="powered-by"] {
+            display: none !important;
+          }
+        `;
+        document.head.appendChild(styleEl);
+
+        // ── 2. Favicon MagicaChat ─────────────────────────────────────
+        function setFavicon() {
+          const svg = encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+              <circle cx="16" cy="16" r="16" fill="#2563EB"/>
+              <text x="16" y="21" font-family="Inter,sans-serif" font-size="14"
+                font-weight="700" fill="white" text-anchor="middle">M</text>
+            </svg>
+          `);
+          let link = document.querySelector("link[rel*='icon']");
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'shortcut icon';
+            document.head.appendChild(link);
+          }
+          link.href = `data:image/svg+xml,${svg}`;
+        }
+
+        // ── 3. Título da página ───────────────────────────────────────
+        function updateTitle() {
+          if (document.title.includes('MagicaChat')) return;
+          const novo = document.title.replace(/Chatwoot/gi, 'MagicaChat');
+          document.title = novo || 'MagicaChat';
+        }
+
+        // ── 4. Logo e textos ─────────────────────────────────────────
+        const logoSVG = encodeURIComponent(`
+          <svg xmlns="http://www.w3.org/2000/svg" width="130" height="30" viewBox="0 0 130 30">
+            <circle cx="15" cy="15" r="15" fill="#2563EB"/>
+            <text x="15" y="20" font-family="Inter,sans-serif" font-size="13"
+              font-weight="700" fill="white" text-anchor="middle">M</text>
+            <text x="38" y="21" font-family="Inter,sans-serif" font-size="15"
+              font-weight="600" fill="#1E293B">Magica</text>
+            <text x="91" y="21" font-family="Inter,sans-serif" font-size="15"
+              font-weight="700" fill="#2563EB">Chat</text>
+          </svg>
+        `);
+        const logoDataURL = `data:image/svg+xml,${logoSVG}`;
+
+        function replaceLogo() {
+          // Substituir <img> com logo do Chatwoot
+          document.querySelectorAll(
+            'img[src*="logo"], img[alt*="Chatwoot"], img[alt*="chatwoot"], img[alt*="Logo"]'
+          ).forEach(img => {
+            if (img.dataset.mcBranded) return;
+            img.dataset.mcBranded = 'true';
+            img.src = logoDataURL;
+            img.alt = 'MagicaChat';
+            img.style.cssText = 'height:28px;width:auto;max-width:140px;';
+          });
+        }
+
+        function replaceText() {
+          const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            {
+              acceptNode(node) {
+                const tag = node.parentElement?.tagName;
+                if (tag === 'SCRIPT' || tag === 'STYLE') return NodeFilter.FILTER_REJECT;
+                return node.nodeValue?.includes('Chatwoot')
+                  ? NodeFilter.FILTER_ACCEPT
+                  : NodeFilter.FILTER_REJECT;
+              },
+            }
+          );
+          let node;
+          while ((node = walker.nextNode())) {
+            node.nodeValue = node.nodeValue.replace(/Chatwoot/g, 'MagicaChat');
+          }
+        }
+
+        // ── 5. Inicializar + manter com observer ──────────────────────
+        function applyAll() {
+          setFavicon();
+          updateTitle();
+          replaceLogo();
+          replaceText();
+        }
+
+        applyAll();
+
+        // Reaplica quando Vue atualiza o DOM
+        const observer = new MutationObserver(() => applyAll());
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Interceptar mudanças de título (Vue Router troca o title)
+        const titleEl = document.querySelector('title');
+        if (titleEl) {
+          new MutationObserver(() => updateTitle()).observe(titleEl, { childList: true });
+        }
+      })();
+    </script>
+  </body>
+</html>
