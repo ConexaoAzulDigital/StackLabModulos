@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mágica Chat — Onboarding de Agente</title>
+  </head>
+  <body>
+    <!--
+      MagicaChat-Onboarding
+      Instalar via: Super Admin → Dashboard Scripts → New Script
+
+      O que faz:
+        - Exibe fluxo guiado somente na 1ª vez que o agente acessa
+        - Spotlight real nos elementos do Chatwoot/Kanban
+        - Popover posicionado dinamicamente (direita, esquerda, centro)
+        - Steps adaptados ao perfil: agente / supervisor / admin
+        - Controle de conclusão via localStorage (por user_id)
+        - Skip em qualquer step; não exibe novamente após concluído
+        - Teclado: → próximo, ← anterior, Esc = pular
+
+      Dependência: MagicaChat-Branding deve estar instalado (fontes/cores)
+    -->
+
+    <script data-name="MagicaChat-Onboarding">
+      (function () {
+        const MODULE_KEY = 'MagicaChat_Onboarding_v1';
+        if (window[MODULE_KEY]) return;
+        window[MODULE_KEY] = true;
+
+        /* ── Brand tokens ─────────────────────────────────────── */
+        const C = {
+          indigo950: '#0B1133',
+          indigo800: '#1E2D78',
+          indigo700: '#2A3D9B',
+          cyan500:   '#2DD2E1',
+          cyan400:   '#5BDDE9',
+          neutral900:'#14182A',
+          neutral600:'#525A75',
+          white:     '#FFFFFF',
+          overlay:   'rgba(11, 17, 51, 0.82)',
+        };
+
+        /* ── Steps do Mágica Chat ──────────────────────────────── */
+        /*
+          seletor: querySelector para spotlight (null = modal centralizado)
+          posicao: 'right' | 'left' | 'bottom' | 'center'
+          perfis:  quais perfis veem este step ('todos' | 'supervisor' | 'admin')
+        */
+        const STEPS_BASE = [
+          {
+            id: 'boas-vindas',
+            titulo: 'Bem-vindo ao Mágica Chat!',
+            descricao: 'Seu sistema de atendimento com IA, Kanban e CRM integrados — tudo para transformar seu WhatsApp em uma operação previsível. Vamos fazer um tour de 1 minuto.',
+            emoji: '👋',
+            seletor: null,
+            posicao: 'center',
+            perfis: 'todos',
+          },
+          {
+            id: 'conversas',
+            titulo: 'Central de Conversas',
+            descricao: 'Aqui chegam mensagens de todos os seus canais: WhatsApp, Instagram, e-mail e mais. Use os filtros no topo para ver só as suas conversas ou as não atribuídas.',
+            emoji: '💬',
+            seletor: '.conversation-list, [class*="conversations-list"]',
+            posicao: 'right',
+            perfis: 'todos',
+          },
+          {
+            id: 'resposta-rapida',
+            titulo: 'Responda com 1 Clique',
+            descricao: 'Na área de digitação, use "/" para acessar respostas rápidas, "@" para mencionar agentes, e "Ctrl+Enter" para enviar. Notas internas (ícone 🔒) ficam visíveis só para a equipe.',
+            emoji: '⚡',
+            seletor: '.conversation-footer, .reply-editor, [class*="reply-box"]',
+            posicao: 'top',
+            perfis: 'todos',
+          },
+          {
+            id: 'kanban',
+            titulo: 'Quadro Kanban',
+            descricao: 'Gerencie negócios, leads e follow-ups em colunas visuais. Arraste cards entre etapas do funil e nunca deixe um cliente sem resposta.',
+            emoji: '🗂️',
+            seletor: '[href*="kanban"], [data-key*="kanban"], [class*="kanban-link"]',
+            posicao: 'right',
+            perfis: 'todos',
+          },
+          {
+            id: 'contatos',
+            titulo: 'Histórico de Contatos',
+            descricao: 'Clique em qualquer contato para ver o histórico completo de conversas, dados do CRM e anotações anteriores. Nada se perde.',
+            emoji: '👥',
+            seletor: '[href*="contacts"], [data-key*="contact"], [class*="contact-link"]',
+            posicao: 'right',
+            perfis: 'todos',
+          },
+          {
+            id: 'relatorios',
+            titulo: 'Relatórios e Visão Geral',
+            descricao: 'Acompanhe o volume de atendimentos, tempo médio de resposta e performance da equipe em tempo real.',
+            emoji: '📊',
+            seletor: '[href*="reports"], [href*="overview"], [data-key*="report"]',
+            posicao: 'right',
+            perfis: 'supervisor',
+          },
+          {
+            id: 'configuracoes',
+            titulo: 'Configurações da Conta',
+            descricao: 'Gerencie agentes, caixas de entrada, automações, respostas rápidas e webhooks para n8n e integrações com o Mágica CRM.',
+            emoji: '⚙️',
+            seletor: '[href*="settings"], [data-key*="setting"]',
+            posicao: 'right',
+            perfis: 'admin',
+          },
+          {
+            id: 'pronto',
+            titulo: 'Você está pronto!',
+            descricao: 'O Mágica Chat está todo configurado. Nossa equipe da Conexão Azul Digital está disponível para ajudar. Boas vendas e ótimos atendimentos! 🚀',
+            emoji: '✨',
+            seletor: null,
+            posicao: 'center',
+            perfis: 'todos',
+          },
+        ];
+
+        /* ── Aguardar Vue carregar antes de iniciar ─────────────── */
+        function waitForApp(cb, tentativas = 0) {
+          if (tentativas > 40) return; // timeout ~20s
+          const app = document.getElementById('app');
+          const vue = window.__vue__;
+          if (app && vue) { cb(vue); return; }
+          setTimeout(() => waitForApp(cb, tentativas + 1), 500);
+        }
+
+        waitForApp(function (vue) {
+          const store = vue.$store;
+          const user  = store?.getters?.getCurrentUser;
+          if (!user) return;
+
+          /* ── Verificar se já completou ────────────────────────── */
+          const storageKey = `mc_onboarding_done_${user.id}`;
+          if (localStorage.getItem(storageKey)) return;
+
+          /* ── Determinar perfil do agente ──────────────────────── */
+          const conta = (user.accounts || []).find(a => a.id === user.account_id);
+          const perms = conta?.permissions || [];
+          const isAdmin = perms.includes('administrator');
+          const isSupervisor = perms.includes('supervisor') || isAdmin;
+
+          /* ── Filtrar steps por perfil ─────────────────────────── */
+          const steps = STEPS_BASE.filter(s => {
+            if (s.perfis === 'todos') return true;
+            if (s.perfis === 'supervisor' && isSupervisor) return true;
+            if (s.perfis === 'admin' && isAdmin) return true;
+            return false;
+          });
+
+          let stepAtual = 0;
+
+          /* ── Criar DOM do onboarding ──────────────────────────── */
+          const overlay = document.createElement('div');
+          overlay.id = 'mc-onboarding-overlay';
+
+          const spotlight = document.createElement('div');
+          spotlight.id = 'mc-onboarding-spotlight';
+
+          const card = document.createElement('div');
+          card.id = 'mc-onboarding-card';
+
+          document.body.appendChild(overlay);
+          document.body.appendChild(spotlight);
+          document.body.appendChild(card);
+
+          /* ── Estilos ──────────────────────────────────────────── */
+          const style = document.createElement('style');
+          style.innerHTML = `
+            #mc-onboarding-overlay {
+              position: fixed;
+              inset: 0;
+              z-index: 99998;
+              background: ${C.overlay};
+              transition: opacity 0.3s ease;
+            }
+
+            #mc-onboarding-spotlight {
+              position: fixed;
+              z-index: 99999;
+              border-radius: 10px;
+              box-shadow:
+                0 0 0 4px ${C.cyan500},
+                0 0 0 9999px ${C.overlay};
+              transition: all 0.35s cubic-bezier(0.2, 0, 0, 1);
+              pointer-events: none;
+            }
+
+            #mc-onboarding-spotlight.oculto {
+              opacity: 0;
+              box-shadow: none;
+            }
+
+            #mc-onboarding-card {
+              position: fixed;
+              z-index: 100000;
+              width: 320px;
+              background: ${C.indigo950};
+              border: 1px solid rgba(45, 210, 225, 0.2);
+              border-radius: 16px;
+              padding: 24px;
+              box-shadow:
+                0 0 0 1px rgba(45,210,225,0.08),
+                0 24px 64px rgba(0,0,0,0.5);
+              transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+              opacity: 0;
+              transform: translateY(8px) scale(0.97);
+            }
+
+            #mc-onboarding-card.visivel {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
+
+            .mc-ob-emoji {
+              font-size: 28px;
+              margin-bottom: 12px;
+              display: block;
+            }
+
+            .mc-ob-titulo {
+              font-family: 'Bricolage Grotesque', 'Inter', sans-serif;
+              font-size: 18px;
+              font-weight: 700;
+              color: ${C.white};
+              letter-spacing: -0.02em;
+              margin: 0 0 10px;
+              line-height: 1.2;
+            }
+
+            .mc-ob-descricao {
+              font-family: 'Inter', sans-serif;
+              font-size: 13.5px;
+              color: rgba(255,255,255,0.72);
+              line-height: 1.6;
+              margin: 0 0 20px;
+            }
+
+            .mc-ob-progresso {
+              display: flex;
+              gap: 6px;
+              align-items: center;
+              margin-bottom: 18px;
+            }
+
+            .mc-ob-dot {
+              width: 6px;
+              height: 6px;
+              border-radius: 50%;
+              background: rgba(255,255,255,0.2);
+              transition: all 0.25s ease;
+              flex-shrink: 0;
+            }
+
+            .mc-ob-dot.ativo {
+              background: ${C.cyan500};
+              width: 18px;
+              border-radius: 3px;
+            }
+
+            .mc-ob-dot.passado {
+              background: rgba(45, 210, 225, 0.4);
+            }
+
+            .mc-ob-acoes {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 10px;
+            }
+
+            .mc-ob-pular {
+              font-family: 'Inter', sans-serif;
+              font-size: 12px;
+              color: rgba(255,255,255,0.35);
+              background: none;
+              border: none;
+              cursor: pointer;
+              padding: 6px 0;
+              transition: color 0.15s;
+            }
+
+            .mc-ob-pular:hover { color: rgba(255,255,255,0.65); }
+
+            .mc-ob-botoes {
+              display: flex;
+              gap: 8px;
+            }
+
+            .mc-ob-btn-voltar {
+              font-family: 'Inter', sans-serif;
+              font-size: 13px;
+              font-weight: 500;
+              color: rgba(255,255,255,0.6);
+              background: rgba(255,255,255,0.08);
+              border: 1px solid rgba(255,255,255,0.1);
+              border-radius: 8px;
+              padding: 8px 14px;
+              cursor: pointer;
+              transition: all 0.15s;
+            }
+
+            .mc-ob-btn-voltar:hover {
+              background: rgba(255,255,255,0.12);
+              color: ${C.white};
+            }
+
+            .mc-ob-btn-proximo {
+              font-family: 'Inter', sans-serif;
+              font-size: 13px;
+              font-weight: 600;
+              color: ${C.indigo950};
+              background: ${C.cyan500};
+              border: none;
+              border-radius: 8px;
+              padding: 8px 18px;
+              cursor: pointer;
+              transition: all 0.15s;
+              white-space: nowrap;
+            }
+
+            .mc-ob-btn-proximo:hover {
+              background: ${C.cyan400};
+              box-shadow: 0 0 0 3px rgba(45,210,225,0.28);
+            }
+
+            /* Ponteiro do card apontando para o spotlight */
+            .mc-ob-seta {
+              position: absolute;
+              width: 12px;
+              height: 12px;
+              background: ${C.indigo950};
+              border: 1px solid rgba(45,210,225,0.2);
+              transform: rotate(45deg);
+            }
+
+            .mc-ob-seta.esquerda {
+              left: -7px;
+              top: 28px;
+              border-right: none;
+              border-top: none;
+            }
+
+            .mc-ob-seta.direita {
+              right: -7px;
+              top: 28px;
+              border-left: none;
+              border-bottom: none;
+            }
+
+            .mc-ob-seta.baixo {
+              bottom: -7px;
+              left: 28px;
+              border-left: none;
+              border-top: none;
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+              #mc-onboarding-card,
+              #mc-onboarding-spotlight {
+                transition: none !important;
+              }
+            }
+          `;
+          document.head.appendChild(style);
+
+          /* ── Calcular posição do card relativo ao spotlight ──── */
+          function posicionarCard(rect, posicao) {
+            const margem = 20;
+            const larguraCard = 320;
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+
+            card.querySelectorAll('.mc-ob-seta').forEach(s => s.remove());
+
+            if (!rect || posicao === 'center') {
+              // modal centralizado
+              card.style.top  = '50%';
+              card.style.left = '50%';
+              card.style.transform = 'translate(-50%, -50%)';
+              card.style.bottom = 'auto';
+              card.style.right = 'auto';
+              return;
+            }
+
+            card.style.transform = '';
+
+            // Tentar posicionar à direita do elemento
+            const podeDir = rect.right + margem + larguraCard < vw;
+            const podeEsq = rect.left - margem - larguraCard > 0;
+
+            let left, top;
+            let setaDir = null;
+
+            if (posicao === 'right' && podeDir) {
+              left = rect.right + margem;
+              top  = Math.max(16, Math.min(rect.top, vh - 300));
+              setaDir = 'esquerda';
+            } else if (posicao === 'left' && podeEsq) {
+              left = rect.left - margem - larguraCard;
+              top  = Math.max(16, Math.min(rect.top, vh - 300));
+              setaDir = 'direita';
+            } else if (podeDir) {
+              left = rect.right + margem;
+              top  = Math.max(16, Math.min(rect.top, vh - 300));
+              setaDir = 'esquerda';
+            } else if (podeEsq) {
+              left = rect.left - margem - larguraCard;
+              top  = Math.max(16, Math.min(rect.top, vh - 300));
+              setaDir = 'direita';
+            } else {
+              // fallback: abaixo do elemento
+              left = Math.max(16, Math.min(rect.left, vw - larguraCard - 16));
+              top  = rect.bottom + margem;
+              setaDir = 'baixo';
+            }
+
+            card.style.left   = `${left}px`;
+            card.style.top    = `${top}px`;
+            card.style.bottom = 'auto';
+            card.style.right  = 'auto';
+
+            if (setaDir) {
+              const seta = document.createElement('div');
+              seta.className = `mc-ob-seta ${setaDir}`;
+              card.appendChild(seta);
+            }
+          }
+
+          /* ── Posicionar spotlight ─────────────────────────────── */
+          function posicionarSpotlight(el) {
+            if (!el) {
+              spotlight.classList.add('oculto');
+              spotlight.style.cssText += 'width:0;height:0;';
+              return null;
+            }
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            const rect = el.getBoundingClientRect();
+            const pad = 6;
+            spotlight.classList.remove('oculto');
+            spotlight.style.top    = `${rect.top - pad}px`;
+            spotlight.style.left   = `${rect.left - pad}px`;
+            spotlight.style.width  = `${rect.width + pad * 2}px`;
+            spotlight.style.height = `${rect.height + pad * 2}px`;
+            return rect;
+          }
+
+          /* ── Renderizar step ──────────────────────────────────── */
+          function renderStep() {
+            const step = steps[stepAtual];
+            const ehUltimo = stepAtual === steps.length - 1;
+            const ehPrimeiro = stepAtual === 0;
+
+            // Atualizar overlay
+            overlay.style.display = step.seletor ? 'none' : 'block';
+
+            // Encontrar elemento alvo
+            const el = step.seletor
+              ? document.querySelector(step.seletor)
+              : null;
+
+            const rect = posicionarSpotlight(el);
+
+            // Atualizar conteúdo do card
+            const dotsHtml = steps.map((_, i) => {
+              const cls = i === stepAtual ? 'ativo' : i < stepAtual ? 'passado' : '';
+              return `<div class="mc-ob-dot ${cls}"></div>`;
+            }).join('');
+
+            card.innerHTML = `
+              <span class="mc-ob-emoji">${step.emoji}</span>
+              <h2 class="mc-ob-titulo">${step.titulo}</h2>
+              <p class="mc-ob-descricao">${step.descricao}</p>
+              <div class="mc-ob-progresso">${dotsHtml}</div>
+              <div class="mc-ob-acoes">
+                <button class="mc-ob-pular" id="mc-ob-pular">
+                  ${ehUltimo ? '' : 'Pular tour'}
+                </button>
+                <div class="mc-ob-botoes">
+                  ${!ehPrimeiro
+                    ? '<button class="mc-ob-btn-voltar" id="mc-ob-voltar">← Voltar</button>'
+                    : ''}
+                  <button class="mc-ob-btn-proximo" id="mc-ob-proximo">
+                    ${ehUltimo ? 'Começar! 🚀' : 'Próximo →'}
+                  </button>
+                </div>
+              </div>
+            `;
+
+            // Posicionar card
+            posicionarCard(
+              el ? el.getBoundingClientRect() : null,
+              step.posicao
+            );
+
+            // Animar entrada
+            card.classList.remove('visivel');
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => card.classList.add('visivel'));
+            });
+
+            // Eventos
+            document.getElementById('mc-ob-proximo')?.addEventListener('click', () => {
+              if (ehUltimo) concluir();
+              else { stepAtual++; renderStep(); }
+            });
+
+            document.getElementById('mc-ob-voltar')?.addEventListener('click', () => {
+              if (!ehPrimeiro) { stepAtual--; renderStep(); }
+            });
+
+            document.getElementById('mc-ob-pular')?.addEventListener('click', () => {
+              if (!ehUltimo) concluir();
+            });
+          }
+
+          /* ── Concluir onboarding ──────────────────────────────── */
+          function concluir() {
+            localStorage.setItem(storageKey, '1');
+            card.classList.remove('visivel');
+            overlay.style.opacity = '0';
+            spotlight.style.opacity = '0';
+            setTimeout(() => {
+              overlay.remove();
+              spotlight.remove();
+              card.remove();
+              style.remove();
+            }, 350);
+            document.removeEventListener('keydown', onKeydown);
+          }
+
+          /* ── Atalhos de teclado ──────────────────────────────── */
+          function onKeydown(e) {
+            if (e.key === 'ArrowRight' || e.key === 'Enter') {
+              e.preventDefault();
+              if (stepAtual === steps.length - 1) concluir();
+              else { stepAtual++; renderStep(); }
+            }
+            if (e.key === 'ArrowLeft') {
+              e.preventDefault();
+              if (stepAtual > 0) { stepAtual--; renderStep(); }
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              concluir();
+            }
+          }
+
+          document.addEventListener('keydown', onKeydown);
+
+          /* ── Reposicionar card/spotlight ao redimensionar ────── */
+          window.addEventListener('resize', () => {
+            if (stepAtual < steps.length) renderStep();
+          });
+
+          /* ── Iniciar ─────────────────────────────────────────── */
+          // Pequeno delay para o Vue terminar de renderizar o layout
+          setTimeout(renderStep, 800);
+        });
+
+      })();
+    </script>
+  </body>
+</html>

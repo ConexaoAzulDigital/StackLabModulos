@@ -52,6 +52,57 @@
           align-items: center;
           justify-content: center;
         }
+
+        .campo-invalido {
+          border-color: #ef4444 !important;
+          outline: none;
+        }
+
+        .mensagem-erro {
+          color: #ef4444;
+          font-size: 12px;
+          margin-top: 4px;
+          display: none;
+        }
+
+        .mensagem-erro.visivel {
+          display: block;
+        }
+
+        .toast-chamada {
+          position: fixed;
+          bottom: 90px;
+          right: 20px;
+          background: #1e293b;
+          color: white;
+          padding: 12px 16px;
+          border-radius: 8px;
+          font-size: 14px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          z-index: 10001;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          transform: translateY(20px);
+          opacity: 0;
+          transition: all 0.3s ease;
+        }
+
+        .toast-chamada.visivel {
+          transform: translateY(0);
+          opacity: 1;
+        }
+
+        .toast-icone {
+          width: 20px;
+          height: 20px;
+          background: #84CC16;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
         
         #modal-chamada.visivel {
           display: flex;
@@ -162,6 +213,7 @@
             <div class="form-grupo">
               <label for="telefone">Número de telefone</label>
               <input type="tel" id="telefone" placeholder="+55 (00) 00000-0000">
+              <span class="mensagem-erro" id="erro-telefone">Insira um número de telefone válido.</span>
             </div>
             <div class="form-grupo">
               <label for="tipo-chamada">Tipo de chamada</label>
@@ -197,22 +249,70 @@
             modal.classList.remove('visivel');
           });
 
+          // 6. Criar toast de confirmação
+          const toast = document.createElement('div');
+          toast.className = 'toast-chamada';
+          toast.innerHTML = `
+            <div class="toast-icone">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+            </div>
+            <span id="toast-mensagem"></span>
+          `;
+          document.body.appendChild(toast);
+
+          function mostrarToast(mensagem) {
+            document.getElementById('toast-mensagem').textContent = mensagem;
+            toast.classList.add('visivel');
+            setTimeout(function () {
+              toast.classList.remove('visivel');
+            }, 4000);
+          }
+
+          function validarTelefone(numero) {
+            const digits = numero.replace(/\D/g, '');
+            return digits.length >= 8 && digits.length <= 15;
+          }
+
+          const inputTelefone = document.getElementById('telefone');
+          const erroTelefone = document.getElementById('erro-telefone');
+
+          inputTelefone.addEventListener('input', function () {
+            if (inputTelefone.classList.contains('campo-invalido')) {
+              inputTelefone.classList.remove('campo-invalido');
+              erroTelefone.classList.remove('visivel');
+            }
+          });
+
           const botaoLigar = modal.querySelector('.botao-ligar');
           botaoLigar.addEventListener('click', function () {
-            const telefone = document.getElementById('telefone').value;
+            const telefone = inputTelefone.value.trim();
             const tipoChamada = document.getElementById('tipo-chamada').value;
 
-            // Aqui você pode adicionar sua lógica para iniciar a chamada
-            alert(
-              `Iniciando ${tipoChamada === 'voz' ? 'chamada de voz' : 'chamada de vídeo'} para: ${telefone}`
-            );
+            if (!validarTelefone(telefone)) {
+              inputTelefone.classList.add('campo-invalido');
+              erroTelefone.classList.add('visivel');
+              inputTelefone.focus();
+              return;
+            }
 
+            const tipoLabel = tipoChamada === 'voz' ? 'Chamada de voz' : 'Chamada de vídeo';
+            mostrarToast(`${tipoLabel} iniciada para ${telefone}`);
             modal.classList.remove('visivel');
+            inputTelefone.value = '';
           });
 
           // Fechar ao clicar fora
           modal.addEventListener('click', function (e) {
             if (e.target === modal) {
+              modal.classList.remove('visivel');
+            }
+          });
+
+          // Fechar com tecla Escape
+          document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal.classList.contains('visivel')) {
               modal.classList.remove('visivel');
             }
           });
