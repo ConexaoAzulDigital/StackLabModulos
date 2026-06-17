@@ -184,6 +184,19 @@ O que faz:
 Tela de loading animada com barra de progresso e etapas. Usar como base
 para criar telas de splash/loading customizadas.
 
+### `examples/onboarding-agent.html` ✅ PRONTO
+**Instalar como:** `MagicaChat-Onboarding`
+
+O que faz:
+- Fluxo guiado somente na 1ª vez que o agente acessa
+- Spotlight real nos elementos do Chatwoot/Kanban (box-shadow overlay)
+- Popover posicionado dinamicamente (direita, esquerda, centro) com seta
+- 8 steps mapeados ao workflow do Mágica Chat: Conversas → Kanban → CRM
+- Steps adaptados ao perfil: agente / supervisor / admin (via Vuex)
+- Controle de conclusão via `localStorage` por `user.id`
+- Keyboard nav: `→` próximo, `←` anterior, `Esc` pular tudo
+- Marca Conexão Azul Digital (indigo-950 bg, cyan-500 spotlight, Bricolage titles)
+
 ### `examples/demo-onboarding.html` — Referência
 Fluxo de onboarding em 4 etapas com animações de transição. Usar como
 base para criar experiências de boas-vindas para novos agentes.
@@ -493,12 +506,8 @@ Flutuante no canto inferior esquerdo:
 - Dado via Vuex store (`agents/getAgents`)
 - Arquivo alvo: `examples/team-status.html`
 
-#### 3D · Onboarding para Novos Agentes
-Fluxo guiado na primeira vez que o agente acessa:
-- Usar padrão da receita 4.5
-- Destacar: inbox, criar conversa, Kanban, atalhos
-- Controle via `localStorage`
-- Arquivo alvo: `examples/onboarding-agent.html`
+#### 3D · Onboarding para Novos Agentes ✅ CONCLUÍDO
+Fluxo guiado na primeira vez que o agente acessa — ver `examples/onboarding-agent.html`.
 
 #### 3E · Exportador de Kanban CSV
 Botão no header do Kanban:
@@ -555,6 +564,7 @@ StackLabModulos/
     ├── call_button.html               ← botão flutuante de chamada
     ├── mobile.html                    ← navbar inferior mobile
     ├── hide-all                       ← ocultar aba "Todos" por perfil
+    ├── onboarding-agent.html          ← FASE 3D ✅ onboarding guiado por perfil
     ├── demo-loading.html              ← referência: tela de loading
     ├── demo-onboarding.html           ← referência: fluxo de onboarding
     └── demo-success-notification.html ← referência: notificação de sucesso
