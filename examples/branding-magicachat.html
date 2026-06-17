@@ -2,202 +2,350 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <title>MagicaChat — Branding Script</title>
+    <title>Mágica Chat — Branding Script v2</title>
   </head>
   <body>
     <!--
-      MagicaChat Branding Script
-      Cole o bloco <script> abaixo em:
-      Super Admin → Dashboard Scripts → New Script
+      Mágica Chat — Branding Script v2
+      Design tokens: conexaoazul/site-conexao-azul-digital/colors_and_type.css
+      Marca: Conexão Azul Digital
 
-      O que este script faz:
-        1. Substitui paleta de cores por "Azul Vibrante Moderno"
-        2. Aplica fonte Inter em toda a interface
-        3. Substitui logo e textos "Chatwoot" por "MagicaChat"
-        4. Atualiza favicon e título da página
-        5. Adiciona refinamentos visuais (scrollbar, bordas, sombras)
+      Instalação:
+        Super Admin → Dashboard Scripts → New Script
+        Cole APENAS o bloco <script data-name="MagicaChat-Branding">…</script>
     -->
 
     <script data-name="MagicaChat-Branding">
       (function () {
-        const MODULE_KEY = 'MagicaChat_Branding_v1';
+        const MODULE_KEY = 'MagicaChat_Branding_v2';
         if (window[MODULE_KEY]) return;
         window[MODULE_KEY] = true;
 
-        // ── 1. Estilos globais ────────────────────────────────────────
+        /* ─────────────────────────────────────────────────────────
+           BRAND TOKENS — conexaoazul/site-conexao-azul-digital
+           colors_and_type.css (source of truth)
+        ───────────────────────────────────────────────────────── */
+        const BRAND = {
+          /* Indigo — base primário do wordmark */
+          indigo: {
+            950: '#0B1133',
+            900: '#131C55',
+            800: '#1E2D78', // ← primary wordmark
+            700: '#2A3D9B',
+            600: '#3A52BD',
+            500: '#5B72D6',
+            400: '#8898E5',
+            300: '#B4BEEF',
+            200: '#D9DEF7',
+            100: '#ECEFFB',
+            50:  '#F5F7FE',
+          },
+          /* Cyan — o "Azul" do logo, cor de acento */
+          cyan: {
+            900: '#0A4F58',
+            800: '#0F7884',
+            700: '#14A0B1',
+            600: '#1FBDD0',
+            500: '#2DD2E1', // ← brand accent
+            400: '#5BDDE9',
+            300: '#8EE8F0',
+            200: '#BFF2F7',
+            100: '#E1F9FB',
+            50:  '#F2FCFD',
+          },
+          /* Neutros — warm-cool slate calibrado ao indigo */
+          neutral: {
+            1000: '#0A0E1F',
+            900:  '#14182A',
+            800:  '#1F2438',
+            700:  '#353B52',
+            600:  '#525A75',
+            500:  '#707991',
+            400:  '#9098AD',
+            300:  '#B6BCCB',
+            200:  '#D5DAE4',
+            100:  '#EBEDF3',
+            50:   '#F5F6F9',
+            0:    '#FFFFFF',
+          },
+          /* Semânticos */
+          success:   '#16A571',
+          warning:   '#E8A23A',
+          danger:    '#DC4848',
+
+          /* Assets — Cloudflare Pages */
+          favicon:   'https://www.conexaoazul.com/favicon.svg',
+          logoLight: 'https://www.conexaoazul.com/logo-light.svg',
+          logoDark:  'https://www.conexaoazul.com/logo-dark.svg',
+          logoMark:  'https://www.conexaoazul.com/logo-mark.png',
+
+          /* Sombras */
+          shadowMd: '0 6px 16px rgba(11,17,51,0.08), 0 2px 4px rgba(11,17,51,0.05)',
+          shadowLg: '0 16px 36px rgba(11,17,51,0.10), 0 4px 8px rgba(11,17,51,0.05)',
+          shadowGlow: '0 0 0 3px rgba(45,210,225,0.32)',
+        };
+
+        /* ─────────────────────────────────────────────────────────
+           1. ESTILOS GLOBAIS
+        ───────────────────────────────────────────────────────── */
         const styleEl = document.createElement('style');
-        styleEl.id = 'magicachat-branding-styles';
+        styleEl.id = 'mc-branding-v2';
         styleEl.innerHTML = `
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+          /* ── Web fonts (Conexão Azul Design System) ── */
+          @import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
-          /* ── Paleta MagicaChat ── */
+          /* ── Tokens de marca injetados no :root do Chatwoot ── */
           :root {
-            --color-woot-50:  #EFF6FF;
-            --color-woot-75:  #DBEAFE;
-            --color-woot-100: #BFDBFE;
-            --color-woot-200: #93C5FD;
-            --color-woot-300: #60A5FA;
-            --color-woot-400: #3B82F6;
-            --color-woot-500: #2563EB;
-            --color-woot-600: #1D4ED8;
-            --color-woot-700: #1E40AF;
-            --color-woot-800: #1E3A8A;
-            --color-woot-900: #172554;
+            /* Paleta cyan → woot (cor de ação primária) */
+            --color-woot-50:  ${BRAND.cyan[50]};
+            --color-woot-75:  ${BRAND.cyan[100]};
+            --color-woot-100: ${BRAND.cyan[200]};
+            --color-woot-200: ${BRAND.cyan[300]};
+            --color-woot-300: ${BRAND.cyan[400]};
+            --color-woot-400: ${BRAND.cyan[500]};
+            --color-woot-500: ${BRAND.cyan[600]};
+            --color-woot-600: ${BRAND.cyan[700]};
+            --color-woot-700: ${BRAND.cyan[800]};
+            --color-woot-800: ${BRAND.cyan[900]};
+            --color-woot-900: #063540;
+            /* HSL de cyan-500 #2DD2E1 → H186 S79% L52% */
+            --color-primary-medium: 186deg 79% 52%;
 
-            /* Cores semânticas mapeadas para o azul */
-            --color-primary-medium: 221deg 83% 53%;
-            --color-primary-dark:   221deg 83% 45%;
-            --color-primary-light:  214deg 95% 93%;
+            /* Tokens da Conexão Azul disponíveis em todo o dashboard */
+            --mc-indigo-950: ${BRAND.indigo[950]};
+            --mc-indigo-800: ${BRAND.indigo[800]};
+            --mc-cyan-500:   ${BRAND.cyan[500]};
+            --mc-cyan-50:    ${BRAND.cyan[50]};
+            --mc-shadow-glow: ${BRAND.shadowGlow};
           }
 
-          /* ── Fonte global ── */
+          /* ── Tipografia global ── */
           *, *::before, *::after {
-            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
-              'Segoe UI', Roboto, sans-serif !important;
-            letter-spacing: -0.01em;
+            font-family: "Inter", system-ui, -apple-system, sans-serif !important;
+            -webkit-font-smoothing: antialiased;
           }
 
-          /* ── Botões primários ── */
+          /* Headings → Bricolage Grotesque (igual ao wordmark) */
+          h1, h2, h3, h4, h5, h6,
+          .title, [class*="--title"], [class*="heading"],
+          .modal-container h1,
+          .modal-container h2,
+          .modal-container h3 {
+            font-family: "Bricolage Grotesque", "Inter", system-ui, sans-serif !important;
+            font-optical-sizing: auto;
+            letter-spacing: -0.02em !important;
+            line-height: 1.15 !important;
+          }
+
+          /* Mono → JetBrains Mono */
+          code, pre, kbd, [class*="code"], [class*="mono"] {
+            font-family: "JetBrains Mono", ui-monospace, monospace !important;
+            font-size: 0.92em !important;
+          }
+
+          /* ── Sidebar primária: indigo-950 ── */
+          .primary-sidebar,
+          aside.primary-sidebar {
+            background: ${BRAND.indigo[950]} !important;
+            border-right: 1px solid rgba(45, 210, 225, 0.10) !important;
+          }
+
+          /* Item ativo: highlight em cyan */
+          .primary-sidebar .sidebar-item--active,
+          .primary-sidebar a.active,
+          .primary-sidebar [class*="--active"] {
+            background: rgba(45, 210, 225, 0.12) !important;
+            border-radius: 8px !important;
+            color: ${BRAND.cyan[500]} !important;
+          }
+
+          .primary-sidebar svg,
+          .primary-sidebar i {
+            color: rgba(255, 255, 255, 0.55) !important;
+            transition: color 150ms ease !important;
+          }
+
+          .primary-sidebar .sidebar-item--active svg,
+          .primary-sidebar .sidebar-item--active i,
+          .primary-sidebar a.active svg,
+          .primary-sidebar a.active i {
+            color: ${BRAND.cyan[500]} !important;
+          }
+
+          /* ── Sidebar secundária: neutral-900 ── */
+          .secondary-sidebar,
+          aside.secondary-sidebar {
+            background: ${BRAND.neutral[900]} !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+          }
+
+          /* ── Botões primários → cyan ── */
           .button.nice.success,
           .woot-button,
           .woot-button--primary,
-          button[class*="primary-"],
-          [class*="button--primary"] {
-            background-color: #2563EB !important;
-            border-color: #2563EB !important;
+          [class*="button--primary"],
+          button[class*="primary"] {
+            background-color: ${BRAND.cyan[500]} !important;
+            border-color:     ${BRAND.cyan[500]} !important;
+            color: ${BRAND.indigo[950]} !important;
+            font-weight: 600 !important;
             border-radius: 8px !important;
+            transition: background-color 150ms ease, box-shadow 150ms ease !important;
           }
 
           .button.nice.success:hover,
           .woot-button:hover,
           .woot-button--primary:hover {
-            background-color: #1D4ED8 !important;
-            border-color: #1D4ED8 !important;
+            background-color: ${BRAND.cyan[400]} !important;
+            border-color:     ${BRAND.cyan[400]} !important;
+            box-shadow: ${BRAND.shadowGlow} !important;
           }
 
-          /* ── Inputs com foco azul ── */
+          /* ── Links ── */
+          a {
+            color: ${BRAND.indigo[700]} !important;
+            transition: color 120ms ease !important;
+          }
+          a:hover { color: ${BRAND.cyan[700]} !important; }
+
+          /* ── Foco / inputs ── */
           input:focus,
           textarea:focus,
           select:focus,
           [contenteditable]:focus {
-            border-color: #2563EB !important;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
+            border-color: ${BRAND.cyan[500]} !important;
+            box-shadow: 0 0 0 3px rgba(45, 210, 225, 0.28) !important;
             outline: none !important;
           }
 
-          /* ── Links ── */
-          a { color: #2563EB !important; }
-          a:hover { color: #1D4ED8 !important; }
+          *:focus-visible {
+            outline: 2px solid ${BRAND.cyan[500]} !important;
+            outline-offset: 2px !important;
+            border-radius: 4px !important;
+          }
 
-          /* ── Badges e pills ── */
+          /* ── Seleção de texto ── */
+          ::selection {
+            background: rgba(45, 210, 225, 0.22);
+            color: ${BRAND.indigo[950]};
+          }
+
+          /* ── Badges / pills ── */
           .badge,
           [class*="badge--primary"],
           [class*="label--primary"] {
-            background-color: #2563EB !important;
-            color: #fff !important;
+            background-color: ${BRAND.cyan[500]} !important;
+            color: ${BRAND.indigo[950]} !important;
+            font-weight: 600 !important;
           }
 
-          /* ── Sidebar primária ── */
-          .primary-sidebar,
-          aside.primary-sidebar {
-            background: linear-gradient(180deg, #1E3A8A 0%, #1D4ED8 100%) !important;
-          }
-
-          .primary-sidebar .sidebar-item--active,
-          .primary-sidebar a.active {
-            background: rgba(255,255,255,0.15) !important;
-            border-radius: 8px !important;
-          }
-
-          /* ── Indicadores / selection ── */
-          ::selection {
-            background: #BFDBFE;
-            color: #1E3A8A;
-          }
-
-          /* ── Scrollbar minimalista ── */
-          ::-webkit-scrollbar          { width: 5px; height: 5px; }
-          ::-webkit-scrollbar-track    { background: transparent; }
-          ::-webkit-scrollbar-thumb    { background: #CBD5E1; border-radius: 4px; }
-          ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
-
-          /* ── Bordas e sombras mais suaves ── */
+          /* ── Cards e modais ── */
           .modal-container,
           [class*="--modal"],
-          [class*="card"],
-          [class*="panel"],
+          [class*="--card"],
           .dropdown-pane {
-            border-radius: 12px !important;
-            box-shadow: 0 8px 24px rgba(30, 58, 138, 0.12) !important;
+            border-radius: 14px !important;
+            box-shadow: ${BRAND.shadowLg} !important;
           }
 
-          /* ── Item de conversa em hover ── */
+          /* ── Item de conversa: hover com borda cyan ── */
           .conversation-item:hover,
           [class*="conversation-item"]:hover {
-            background: #EFF6FF !important;
-            border-left: 3px solid #2563EB !important;
+            background: ${BRAND.cyan[50]} !important;
+            border-left: 3px solid ${BRAND.cyan[500]} !important;
           }
 
-          /* ── Ocultar "Powered by Chatwoot" se presente ── */
+          /* ── Kanban: colunas com topo cyan ── */
+          [class*="kanban-column"],
+          [class*="KanbanColumn"] {
+            border-top: 3px solid ${BRAND.cyan[500]} !important;
+            border-radius: 12px !important;
+          }
+
+          /* ── Scrollbar discreta em cyan ── */
+          ::-webkit-scrollbar          { width: 5px; height: 5px; }
+          ::-webkit-scrollbar-track    { background: transparent; }
+          ::-webkit-scrollbar-thumb    { background: rgba(45,210,225,0.28); border-radius: 4px; }
+          ::-webkit-scrollbar-thumb:hover { background: rgba(45,210,225,0.55); }
+
+          /* ── Ocultar referências ao Chatwoot ── */
           [href*="chatwoot.com"],
           [class*="powered-by"] {
             display: none !important;
           }
+
+          /* ── motion: respeitar prefers-reduced-motion ── */
+          @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+              transition-duration: 0.001ms !important;
+              animation-duration:  0.001ms !important;
+            }
+          }
         `;
         document.head.appendChild(styleEl);
 
-        // ── 2. Favicon MagicaChat ─────────────────────────────────────
+        /* ─────────────────────────────────────────────────────────
+           2. FAVICON
+        ───────────────────────────────────────────────────────── */
         function setFavicon() {
-          const svg = encodeURIComponent(`
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-              <circle cx="16" cy="16" r="16" fill="#2563EB"/>
-              <text x="16" y="21" font-family="Inter,sans-serif" font-size="14"
-                font-weight="700" fill="white" text-anchor="middle">M</text>
-            </svg>
-          `);
           let link = document.querySelector("link[rel*='icon']");
           if (!link) {
             link = document.createElement('link');
             link.rel = 'shortcut icon';
             document.head.appendChild(link);
           }
-          link.href = `data:image/svg+xml,${svg}`;
+          link.href = BRAND.favicon;
+          link.type = 'image/svg+xml';
         }
 
-        // ── 3. Título da página ───────────────────────────────────────
+        /* ─────────────────────────────────────────────────────────
+           3. TÍTULO: "Chatwoot" → "Mágica Chat"
+        ───────────────────────────────────────────────────────── */
         function updateTitle() {
-          if (document.title.includes('MagicaChat')) return;
-          const novo = document.title.replace(/Chatwoot/gi, 'MagicaChat');
-          document.title = novo || 'MagicaChat';
+          if (document.title.includes('Mágica Chat')) return;
+          const novo = document.title.replace(/Chatwoot/gi, 'Mágica Chat');
+          document.title = novo || 'Mágica Chat';
         }
 
-        // ── 4. Logo e textos ─────────────────────────────────────────
-        const logoSVG = encodeURIComponent(`
-          <svg xmlns="http://www.w3.org/2000/svg" width="130" height="30" viewBox="0 0 130 30">
-            <circle cx="15" cy="15" r="15" fill="#2563EB"/>
-            <text x="15" y="20" font-family="Inter,sans-serif" font-size="13"
-              font-weight="700" fill="white" text-anchor="middle">M</text>
-            <text x="38" y="21" font-family="Inter,sans-serif" font-size="15"
-              font-weight="600" fill="#1E293B">Magica</text>
-            <text x="91" y="21" font-family="Inter,sans-serif" font-size="15"
-              font-weight="700" fill="#2563EB">Chat</text>
-          </svg>
-        `);
-        const logoDataURL = `data:image/svg+xml,${logoSVG}`;
-
+        /* ─────────────────────────────────────────────────────────
+           4. LOGO
+           - Sidebar escura (indigo-950) → logo-light.svg (texto branco)
+           - Demais contextos           → logo-dark.svg (texto escuro)
+        ───────────────────────────────────────────────────────── */
         function replaceLogo() {
-          // Substituir <img> com logo do Chatwoot
           document.querySelectorAll(
             'img[src*="logo"], img[alt*="Chatwoot"], img[alt*="chatwoot"], img[alt*="Logo"]'
           ).forEach(img => {
-            if (img.dataset.mcBranded) return;
-            img.dataset.mcBranded = 'true';
-            img.src = logoDataURL;
-            img.alt = 'MagicaChat';
-            img.style.cssText = 'height:28px;width:auto;max-width:140px;';
+            if (img.dataset.mcv2) return;
+            img.dataset.mcv2 = 'true';
+
+            const inDarkSurface = img.closest(
+              '.primary-sidebar, .secondary-sidebar, aside, [class*="dark"], [data-theme="dark"]'
+            );
+
+            img.src = inDarkSurface ? BRAND.logoLight : BRAND.logoDark;
+            img.alt = 'Mágica Chat';
+            img.style.cssText = 'height:28px;width:auto;max-width:160px;display:block;';
+
+            /* Fallback: se logo não carregar, renderizar texto da marca */
+            img.onerror = function () {
+              const span = document.createElement('span');
+              span.style.cssText = `
+                font-family: 'Bricolage Grotesque', sans-serif;
+                font-size: 17px;
+                font-weight: 700;
+                letter-spacing: -0.03em;
+                color: ${inDarkSurface ? BRAND.cyan[500] : BRAND.indigo[800]};
+              `;
+              span.textContent = 'Mágica Chat';
+              img.replaceWith(span);
+            };
           });
         }
 
+        /* ─────────────────────────────────────────────────────────
+           5. TEXTOS "Chatwoot" → "Mágica Chat"
+        ───────────────────────────────────────────────────────── */
         function replaceText() {
           const walker = document.createTreeWalker(
             document.body,
@@ -214,11 +362,13 @@
           );
           let node;
           while ((node = walker.nextNode())) {
-            node.nodeValue = node.nodeValue.replace(/Chatwoot/g, 'MagicaChat');
+            node.nodeValue = node.nodeValue.replace(/Chatwoot/g, 'Mágica Chat');
           }
         }
 
-        // ── 5. Inicializar + manter com observer ──────────────────────
+        /* ─────────────────────────────────────────────────────────
+           6. INIT + MUTATION OBSERVER
+        ───────────────────────────────────────────────────────── */
         function applyAll() {
           setFavicon();
           updateTitle();
@@ -228,14 +378,15 @@
 
         applyAll();
 
-        // Reaplica quando Vue atualiza o DOM
-        const observer = new MutationObserver(() => applyAll());
-        observer.observe(document.body, { childList: true, subtree: true });
+        /* Reaplica quando o Vue.js atualiza o DOM */
+        new MutationObserver(applyAll)
+          .observe(document.body, { childList: true, subtree: true });
 
-        // Interceptar mudanças de título (Vue Router troca o title)
+        /* Intercepta mudanças de título pelo Vue Router */
         const titleEl = document.querySelector('title');
         if (titleEl) {
-          new MutationObserver(() => updateTitle()).observe(titleEl, { childList: true });
+          new MutationObserver(updateTitle)
+            .observe(titleEl, { childList: true });
         }
       })();
     </script>
