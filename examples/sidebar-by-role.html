@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mágica Chat — Sidebar por Perfil</title>
+  </head>
+  <body>
+    <!--
+      Mágica Chat — Sidebar Visibility by Role
+      Produto: Mágica Chat (Chatwoot customizado)
+      Empresa: Conexão Azul Digital — conexaoazul.com
+      Versão:  v1
+
+      O que faz:
+        Oculta itens da sidebar lateral com base no perfil do agente logado:
+          - Agente     → Conversas, Contatos, Kanban
+          - Supervisor → + Relatórios, Visão Geral
+          - Admin      → Tudo visível (sem ocultação)
+
+        Detecção de perfil via Vuex (window.__vue__.$store).
+        Fallback para perfil mais restritivo (agente) se a store não estiver
+        disponível após 3 s.
+
+        Estratégia de seletor (em ordem de prioridade):
+          1. a[href*="/reports"], a[href*="/settings"]
+          2. Texto do link: "Relatório*", "Report*", "Configurações*",
+             "Settings*", "Visão Geral", "Overview"
+
+        O <li> pai recebe display:none + aria-hidden="true".
+        Um bloco <style> de fallback é injetado antes do observer disparar.
+
+      Instalação:
+        Super Admin → Dashboard Scripts → New Script
+        Cole APENAS o bloco <script data-name="MagicaChat-SidebarByRole">…</script>
+        Nome sugerido: MagicaChat-SidebarByRole
+    -->
+
+    <script data-name="MagicaChat-SidebarByRole">
+(function () {
+  /* ─────────────────────────────────────────────────────────
+     IDEMPOTÊNCIA
+  ───────────────────────────────────────────────────────── */
+  const KEY = 'MagicaChat_SidebarByRole_v1';
+  if (window[KEY]) return;
+  window[KEY] = true;
+
+  const LOG_PREFIX = '[MagicaChat:SidebarByRole]';
+
+  /* ─────────────────────────────────────────────────────────
+     CONFIGURAÇÃO: PADRÕES DE OCULTAÇÃO POR PERFIL
+     Cada entrada define:
+       hrefs   — fragmentos de URL que identificam o item
+       texts   — fragmentos de texto (innerText) que identificam o item
+       roles   — quais perfis NÃO devem ver este item
+                 ('agente' = sem supervisor/admin; só agente)
+  ───────────────────────────────────────────────────────── */
+  var HIDDEN_RULES = [
+    {
+      // Relatórios — oculto para agentes
+      hrefs: ['/reports'],
+      texts: ['relatório', 'relatorio', 'report'],
+      hideFor: ['agente'],
+    },
+    {
+      // Visão Geral / Overview — oculto para agentes
+      hrefs: ['/reports/overview', '/overview'],
+      texts: ['visão geral', 'visao geral', 'overview'],
+      hideFor: ['agente'],
+    },
+    {
+      // Configurações — oculto para agentes e supervisores
+      hrefs: ['/settings'],
+      texts: ['configurações', 'configuracoes', 'settings'],
+      hideFor: ['agente', 'supervisor'],
+    },
+  ];
+
+  /* ─────────────────────────────────────────────────────────
+     DETECÇÃO DE PERFIL VIA VUEX
+  ───────────────────────────────────────────────────────── */
+  function getRoleFromStore() {
+    try {
+      var vue = window.__vue__;
+      var store = vue && vue.$store;
+      if (!store) return null;
+
+      var user = store.getters && store.getters.getCurrentUser;
+      if (!user) return null;
+
+      var accountId = user.account_id;
+      var accounts = user.accounts || [];
+      var account = accounts.find(function (a) { return a.id === accountId; });
+      var perms = (account && account.permissions) || [];
+
+      if (perms.includes('administrator')) return 'admin';
+      if (perms.includes('supervisor'))    return 'supervisor';
+      return 'agente';
+    } catch (e) {
+      console.warn(LOG_PREFIX, 'erro ao ler Vuex store:', e);
+      return null;
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     INJEÇÃO DE ESTILO DE FALLBACK (antes do observer disparar)
+     Será substituído/removido quando o perfil for detectado.
+     Por enquanto, oculta os itens mais restritivos (agente).
+  ───────────────────────────────────────────────────────── */
+  var FALLBACK_STYLE_ID = 'mc-sidebar-role-fallback';
+
+  function injectFallbackStyle() {
+    if (document.getElementById(FALLBACK_STYLE_ID)) return;
+    var style = document.createElement('style');
+    style.id = FALLBACK_STYLE_ID;
+    // Oculta Relatórios e Configurações por href até o perfil ser conhecido
+    style.textContent = [
+      'a[href*="/reports"], li:has(> a[href*="/reports"]) { display: none !important; }',
+      'a[href*="/settings"], li:has(> a[href*="/settings"]) { display: none !important; }',
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  function removeFallbackStyle() {
+    var el = document.getElementById(FALLBACK_STYLE_ID);
+    if (el) el.remove();
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     ESTILO DEFINITIVO — injetado após detecção de perfil
+  ───────────────────────────────────────────────────────── */
+  var ROLE_STYLE_ID = 'mc-sidebar-role-style';
+
+  function buildCssForRole(role) {
+    if (role === 'admin') return ''; // admin vê tudo
+
+    var selectors = [];
+    HIDDEN_RULES.forEach(function (rule) {
+      if (rule.hideFor.indexOf(role) === -1) return;
+      rule.hrefs.forEach(function (href) {
+        selectors.push('a[href*="' + href + '"]');
+      });
+    });
+
+    if (selectors.length === 0) return '';
+    return selectors.join(',\n') + ' { display: none !important; }';
+  }
+
+  function injectRoleStyle(role) {
+    var existing = document.getElementById(ROLE_STYLE_ID);
+    if (existing) existing.remove();
+
+    var css = buildCssForRole(role);
+    if (!css) return; // admin: sem estilo restritivo
+
+    var style = document.createElement('style');
+    style.id = ROLE_STYLE_ID;
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     CORRESPONDÊNCIA DE LINKS POR HREF E TEXTO
+  ───────────────────────────────────────────────────────── */
+  function linkMatchesRule(anchor, rule) {
+    var href = (anchor.getAttribute('href') || '').toLowerCase();
+    for (var i = 0; i < rule.hrefs.length; i++) {
+      if (href.indexOf(rule.hrefs[i]) !== -1) return true;
+    }
+
+    var text = (anchor.innerText || anchor.textContent || '').trim().toLowerCase();
+    for (var j = 0; j < rule.texts.length; j++) {
+      if (text.indexOf(rule.texts[j]) !== -1) return true;
+    }
+
+    return false;
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     APLICAR OCULTAÇÃO / VISIBILIDADE AO DOM
+  ───────────────────────────────────────────────────────── */
+  function applyVisibility(role) {
+    var anchors = document.querySelectorAll(
+      '.primary-sidebar a, .secondary-sidebar a, nav a, [class*="sidebar"] a'
+    );
+
+    anchors.forEach(function (anchor) {
+      HIDDEN_RULES.forEach(function (rule) {
+        if (!linkMatchesRule(anchor, rule)) return;
+
+        var li = anchor.closest('li');
+        var target = li || anchor;
+
+        var shouldHide = role !== 'admin' && rule.hideFor.indexOf(role) !== -1;
+
+        if (shouldHide) {
+          target.style.setProperty('display', 'none', 'important');
+          target.setAttribute('aria-hidden', 'true');
+        } else {
+          // Restaurar apenas se foi ocultado por este script
+          if (target.getAttribute('aria-hidden') === 'true') {
+            target.style.removeProperty('display');
+            target.removeAttribute('aria-hidden');
+          }
+        }
+      });
+    });
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     MUTATION OBSERVER COM THROTTLE (300 ms)
+  ───────────────────────────────────────────────────────── */
+  var throttleTimer = null;
+
+  function startObserver(role) {
+    var observer = new MutationObserver(function () {
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(function () {
+        throttleTimer = null;
+        applyVisibility(role);
+      }, 300);
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     POLLING PARA AGUARDAR VUEX STORE (até 3 s, a cada 200 ms)
+  ───────────────────────────────────────────────────────── */
+  var POLL_INTERVAL  = 200;  // ms
+  var POLL_MAX_WAIT  = 3000; // ms
+  var pollElapsed    = 0;
+  var pollTimer      = null;
+
+  function onRoleResolved(role) {
+    console.log(LOG_PREFIX, 'role:', role);
+
+    // Remove fallback genérico e injeta CSS definitivo
+    removeFallbackStyle();
+    injectRoleStyle(role);
+
+    // Aplica imediatamente ao DOM atual
+    applyVisibility(role);
+
+    // Observa mudanças futuras do Vue SPA
+    startObserver(role);
+  }
+
+  function pollForStore() {
+    var role = getRoleFromStore();
+
+    if (role !== null) {
+      clearTimeout(pollTimer);
+      onRoleResolved(role);
+      return;
+    }
+
+    pollElapsed += POLL_INTERVAL;
+    if (pollElapsed >= POLL_MAX_WAIT) {
+      clearTimeout(pollTimer);
+      console.warn(LOG_PREFIX, 'Vuex store não disponível após', POLL_MAX_WAIT, 'ms — usando perfil "agente" (mais restritivo).');
+      onRoleResolved('agente');
+      return;
+    }
+
+    pollTimer = setTimeout(pollForStore, POLL_INTERVAL);
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     INICIALIZAÇÃO
+  ───────────────────────────────────────────────────────── */
+  // Injeta fallback imediatamente para evitar flash de itens proibidos
+  injectFallbackStyle();
+
+  // Inicia polling assim que o DOM estiver minimamente pronto
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      pollForStore();
+    });
+  } else {
+    pollForStore();
+  }
+})();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,772 @@
+<!--
+  MagicaChat-CommandPalette
+  =========================
+  Paleta de comandos global (Ctrl+K / Cmd+K) para o Mágica Chat.
+
+  O QUE FAZ:
+  - Abre com Ctrl+K (ou Cmd+K no Mac) em qualquer página do dashboard
+  - Pesquisa em tempo real em três fontes de dados:
+      1. Rotas fixas (Conversas, Contatos, Kanban, etc.) — filtradas por perfil
+      2. Conversas abertas via Vuex store
+      3. Contatos via Vuex store
+  - Navegação por teclado (↑↓ Enter Esc) e clique
+  - Fecha ao clicar fora da paleta
+  - Idempotente: executa só uma vez via MODULE_KEY
+  - MutationObserver garante que o atalho persista em mudanças de rota SPA
+
+  COMO INSTALAR:
+  1. Acesse: magicachat.conexaoazul.com/super_admin/dashboard_scripts
+  2. Clique em "New Script"
+  3. Nome: MagicaChat-CommandPalette
+  4. Cole o conteúdo do bloco <script> abaixo
+  5. Ative o script e salve
+
+  PERFIS E PERMISSÕES:
+  - Agente:     Conversas, Contatos, Kanban
+  - Supervisor: + Relatórios, Visão Geral
+  - Admin:      + Configurações (tudo acima)
+-->
+<script data-name="MagicaChat-CommandPalette">
+(function () {
+  const KEY = 'MagicaChat_CommandPalette_v1';
+  if (window[KEY]) return;
+  window[KEY] = true;
+
+  /* ─── Brand tokens ─────────────────────────────────────────────── */
+  const C = {
+    indigo950:  '#0B1133',
+    indigo800:  '#1E2D78',
+    indigo700:  '#2A3D9B',
+    cyan500:    '#2DD2E1',
+    cyan400:    '#5BDDE9',
+    cyan100:    '#E1F9FB',
+    neutral900: '#14182A',
+    neutral800: '#1F2438',
+    neutral700: '#353B52',
+    neutral600: '#525A75',
+    neutral400: '#9098AD',
+    neutral300: '#B6BCCB',
+    neutral100: '#EBEDF3',
+    white:      '#FFFFFF',
+  };
+
+  /* ─── State ─────────────────────────────────────────────────────── */
+  let isOpen       = false;
+  let activeIndex  = 0;
+  let currentItems = [];
+  let storeRef     = null;
+
+  /* ─── Helpers ────────────────────────────────────────────────────── */
+  function getAccountId() {
+    return window.location.pathname.match(/\/app\/accounts\/(\d+)/)?.[1] ?? null;
+  }
+
+  function navigate(path) {
+    const id = getAccountId();
+    if (!id) return;
+    window.location.href = `/app/accounts/${id}/${path}`;
+  }
+
+  function getUserRole(store) {
+    try {
+      const user = store?.getters?.getCurrentUser;
+      if (!user) return 'agent';
+      const accountId = user.account_id;
+      const account = (user.accounts || []).find(a => String(a.id) === String(accountId));
+      if (!account) return 'agent';
+      const perms = account.permissions || account.role || '';
+      if (typeof perms === 'string') {
+        if (perms === 'administrator') return 'admin';
+        if (perms === 'supervisor')    return 'supervisor';
+        return 'agent';
+      }
+      if (Array.isArray(perms)) {
+        if (perms.includes('administrator')) return 'admin';
+        if (perms.includes('supervisor'))    return 'supervisor';
+      }
+      return 'agent';
+    } catch (_) {
+      return 'agent';
+    }
+  }
+
+  /* ─── Data sources ────────────────────────────────────────────────── */
+  function getStaticRoutes(role) {
+    const routes = [
+      {
+        id: 'route-conversations',
+        label: 'Conversas',
+        category: 'Navegar',
+        path: 'conversations',
+        icon: iconChat(),
+        roles: ['agent', 'supervisor', 'admin'],
+      },
+      {
+        id: 'route-contacts',
+        label: 'Contatos',
+        category: 'Navegar',
+        path: 'contacts',
+        icon: iconContacts(),
+        roles: ['agent', 'supervisor', 'admin'],
+      },
+      {
+        id: 'route-kanban',
+        label: 'Kanban',
+        category: 'Navegar',
+        path: 'kanban',
+        icon: iconKanban(),
+        roles: ['agent', 'supervisor', 'admin'],
+      },
+      {
+        id: 'route-reports',
+        label: 'Relatórios',
+        category: 'Navegar',
+        path: 'reports',
+        icon: iconReports(),
+        roles: ['supervisor', 'admin'],
+      },
+      {
+        id: 'route-overview',
+        label: 'Visão Geral',
+        category: 'Navegar',
+        path: 'reports/overview',
+        icon: iconOverview(),
+        roles: ['supervisor', 'admin'],
+      },
+      {
+        id: 'route-settings',
+        label: 'Configurações',
+        category: 'Navegar',
+        path: 'settings/general',
+        icon: iconSettings(),
+        roles: ['admin'],
+      },
+    ];
+    return routes.filter(r => r.roles.includes(role));
+  }
+
+  function getConversations(store) {
+    if (!store) return [];
+    try {
+      const getters = store.getters;
+      // Try multiple possible getter keys
+      const keys = [
+        'conversations/getAllConversations',
+        'getAllConversations',
+        'conversations/getConversations',
+      ];
+      let convList = null;
+      for (const k of keys) {
+        const val = getters[k];
+        if (Array.isArray(val) && val.length > 0) { convList = val; break; }
+        // Some versions return an object keyed by ID
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+          const arr = Object.values(val);
+          if (arr.length > 0) { convList = arr; break; }
+        }
+      }
+      if (!convList) return [];
+      return convList.slice(0, 100).map(conv => {
+        const name  = conv.meta?.sender?.name
+                   || conv.contact?.name
+                   || conv.meta?.channel
+                   || `#${conv.id}`;
+        const inbox = conv.inbox_id
+          ? (conv.meta?.channel || conv.inbox_id)
+          : '';
+        const status = statusLabel(conv.status);
+        return {
+          id: `conv-${conv.id}`,
+          label: name,
+          sublabel: inbox ? `${inbox} · ${status}` : status,
+          category: 'Conversa',
+          icon: iconChat(),
+          action: () => navigate(`conversations/${conv.id}`),
+        };
+      });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function getContacts(store) {
+    if (!store) return [];
+    try {
+      const getters = store.getters;
+      const keys = [
+        'contacts/allContacts',
+        'allContacts',
+        'contacts/getContacts',
+      ];
+      let contactList = null;
+      for (const k of keys) {
+        const val = getters[k];
+        if (Array.isArray(val) && val.length > 0) { contactList = val; break; }
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+          const arr = Object.values(val);
+          if (arr.length > 0) { contactList = arr; break; }
+        }
+      }
+      if (!contactList) return [];
+      return contactList.slice(0, 100).map(c => {
+        const sub = c.phone_number || c.email || '';
+        return {
+          id: `contact-${c.id}`,
+          label: c.name || `Contato #${c.id}`,
+          sublabel: sub,
+          category: 'Contato',
+          icon: iconContacts(),
+          action: () => navigate(`contacts/${c.id}`),
+        };
+      });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function statusLabel(s) {
+    const map = { open: 'Aberta', resolved: 'Resolvida', pending: 'Pendente', snoozed: 'Adiada' };
+    return map[s] || s || '';
+  }
+
+  /* ─── SVG icons (inline, no external deps) ────────────────────────── */
+  function svgWrap(path, extra) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra || ''}>${path}</svg>`;
+  }
+  function iconChat()      { return svgWrap('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'); }
+  function iconContacts()  { return svgWrap('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'); }
+  function iconKanban()    { return svgWrap('<rect x="3" y="3" width="5" height="18"/><rect x="10" y="3" width="5" height="11"/><rect x="17" y="3" width="5" height="15"/>'); }
+  function iconReports()   { return svgWrap('<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'); }
+  function iconOverview()  { return svgWrap('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>'); }
+  function iconSettings()  { return svgWrap('<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>'); }
+  function iconSearch()    { return svgWrap('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'); }
+
+  /* ─── Build item list ──────────────────────────────────────────────── */
+  function buildItems(query) {
+    const store = storeRef;
+    const role  = getUserRole(store);
+    const q     = (query || '').toLowerCase().trim();
+
+    const staticRoutes = getStaticRoutes(role).map(r => ({
+      id:     r.id,
+      label:  r.label,
+      sublabel: null,
+      category: r.category,
+      icon:   r.icon,
+      action: () => navigate(r.path),
+    }));
+
+    const conversations = getConversations(store);
+    const contacts      = getContacts(store);
+    const all           = [...staticRoutes, ...conversations, ...contacts];
+
+    if (!q) return all;
+
+    return all.filter(item => {
+      const haystack = [item.label, item.sublabel, item.category]
+        .filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }
+
+  /* ─── Styles ──────────────────────────────────────────────────────── */
+  function injectStyles() {
+    const id = 'mc-cp-styles';
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `
+      @import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Inter:wght@400;500;600&display=swap");
+
+      #mc-cp-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: rgba(11, 17, 51, 0.75);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: clamp(60px, 12vh, 140px);
+        opacity: 0;
+        transition: opacity 150ms ease;
+      }
+      #mc-cp-overlay.mc-cp-visible {
+        opacity: 1;
+      }
+
+      #mc-cp-palette {
+        background: ${C.neutral800};
+        border-radius: 14px;
+        width: 100%;
+        max-width: 560px;
+        margin: 0 16px;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(45, 210, 225, 0.15);
+        overflow: hidden;
+        transform: scale(0.96);
+        transition: transform 150ms ease;
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 180px);
+      }
+      #mc-cp-overlay.mc-cp-visible #mc-cp-palette {
+        transform: scale(1);
+      }
+
+      #mc-cp-header {
+        padding: 14px 16px 10px;
+        border-bottom: 1px solid rgba(53, 59, 82, 0.6);
+        flex-shrink: 0;
+      }
+
+      #mc-cp-title {
+        font-family: 'Bricolage Grotesque', sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: ${C.neutral400};
+        margin: 0 0 10px 0;
+      }
+
+      #mc-cp-input-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+
+      #mc-cp-search-icon {
+        position: absolute;
+        left: 12px;
+        color: ${C.neutral400};
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+      }
+
+      #mc-cp-input {
+        width: 100%;
+        background: ${C.neutral900};
+        border: 1.5px solid ${C.neutral700};
+        border-radius: 8px;
+        padding: 10px 14px 10px 40px;
+        font-family: 'Inter', sans-serif;
+        font-size: 18px;
+        font-weight: 400;
+        color: ${C.white};
+        outline: none;
+        transition: border-color 150ms ease, box-shadow 150ms ease;
+        box-sizing: border-box;
+      }
+      #mc-cp-input::placeholder {
+        color: rgba(45, 210, 225, 0.5);
+      }
+      #mc-cp-input:focus {
+        border-color: ${C.cyan500};
+        box-shadow: 0 0 0 3px rgba(45, 210, 225, 0.15);
+      }
+
+      #mc-cp-results {
+        overflow-y: auto;
+        flex: 1;
+        padding: 6px 0;
+        scrollbar-width: thin;
+        scrollbar-color: ${C.neutral700} transparent;
+      }
+      #mc-cp-results::-webkit-scrollbar {
+        width: 4px;
+      }
+      #mc-cp-results::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      #mc-cp-results::-webkit-scrollbar-thumb {
+        background: ${C.neutral700};
+        border-radius: 2px;
+      }
+
+      .mc-cp-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 40px;
+        padding: 0 14px;
+        cursor: pointer;
+        border-left: 3px solid transparent;
+        transition: background 100ms ease, border-color 100ms ease;
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        color: ${C.neutral300};
+        user-select: none;
+        box-sizing: border-box;
+      }
+      .mc-cp-item:hover,
+      .mc-cp-item.mc-cp-active {
+        background: rgba(45, 210, 225, 0.12);
+        border-left-color: ${C.cyan500};
+        color: ${C.white};
+      }
+      .mc-cp-item:hover .mc-cp-item-icon,
+      .mc-cp-item.mc-cp-active .mc-cp-item-icon {
+        color: ${C.cyan500};
+      }
+
+      .mc-cp-item-icon {
+        color: ${C.neutral600};
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+        transition: color 100ms ease;
+      }
+
+      .mc-cp-item-text {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 0;
+      }
+
+      .mc-cp-item-label {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.2;
+        font-weight: 500;
+      }
+
+      .mc-cp-item-sublabel {
+        font-size: 11px;
+        color: ${C.neutral400};
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.2;
+        margin-top: 1px;
+      }
+
+      .mc-cp-item-category {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 100px;
+        background: rgba(45, 210, 225, 0.15);
+        color: ${C.cyan500};
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-family: 'Inter', sans-serif;
+      }
+
+      #mc-cp-empty {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        height: 80px;
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        color: ${C.neutral400};
+      }
+
+      #mc-cp-footer {
+        padding: 8px 16px;
+        border-top: 1px solid rgba(53, 59, 82, 0.6);
+        display: flex;
+        gap: 16px;
+        font-family: 'Inter', sans-serif;
+        font-size: 11px;
+        color: ${C.neutral600};
+        flex-shrink: 0;
+      }
+
+      .mc-cp-hint {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .mc-cp-key {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: ${C.neutral700};
+        color: ${C.neutral300};
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 11px;
+        font-weight: 600;
+        min-width: 18px;
+        letter-spacing: 0;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #mc-cp-overlay,
+        #mc-cp-palette {
+          transition: none;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /* ─── DOM construction ────────────────────────────────────────────── */
+  function buildDOM() {
+    if (document.getElementById('mc-cp-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'mc-cp-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Buscar no Mágica Chat');
+
+    overlay.innerHTML = `
+      <div id="mc-cp-palette">
+        <div id="mc-cp-header">
+          <div id="mc-cp-title">Buscar no Mágica Chat</div>
+          <div id="mc-cp-input-wrap">
+            <span id="mc-cp-search-icon" aria-hidden="true">${iconSearch()}</span>
+            <input
+              id="mc-cp-input"
+              type="text"
+              placeholder="O que você procura?"
+              autocomplete="off"
+              spellcheck="false"
+              aria-autocomplete="list"
+              aria-controls="mc-cp-results"
+            />
+          </div>
+        </div>
+        <div id="mc-cp-results" role="listbox" aria-label="Resultados"></div>
+        <div id="mc-cp-empty" aria-live="polite">Nenhum resultado</div>
+        <div id="mc-cp-footer" aria-hidden="true">
+          <span class="mc-cp-hint">
+            <span class="mc-cp-key">↑</span><span class="mc-cp-key">↓</span> navegar
+          </span>
+          <span class="mc-cp-hint">
+            <span class="mc-cp-key">↵</span> abrir
+          </span>
+          <span class="mc-cp-hint">
+            <span class="mc-cp-key">Esc</span> fechar
+          </span>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    bindEvents(overlay);
+  }
+
+  /* ─── Render results ──────────────────────────────────────────────── */
+  function renderItems(items) {
+    const list  = document.getElementById('mc-cp-results');
+    const empty = document.getElementById('mc-cp-empty');
+    if (!list || !empty) return;
+
+    currentItems = items;
+    activeIndex  = 0;
+
+    list.innerHTML = '';
+
+    if (items.length === 0) {
+      list.style.display  = 'none';
+      empty.style.display = 'flex';
+      return;
+    }
+
+    list.style.display  = '';
+    empty.style.display = 'none';
+
+    items.forEach((item, i) => {
+      const el = document.createElement('div');
+      el.className = 'mc-cp-item' + (i === 0 ? ' mc-cp-active' : '');
+      el.setAttribute('role', 'option');
+      el.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
+      el.dataset.index = String(i);
+
+      el.innerHTML = `
+        <span class="mc-cp-item-icon" aria-hidden="true">${item.icon}</span>
+        <span class="mc-cp-item-text">
+          <span class="mc-cp-item-label">${escHtml(item.label)}</span>
+          ${item.sublabel ? `<span class="mc-cp-item-sublabel">${escHtml(item.sublabel)}</span>` : ''}
+        </span>
+        <span class="mc-cp-item-category">${escHtml(item.category)}</span>
+      `;
+
+      el.addEventListener('mouseenter', () => setActive(i));
+      el.addEventListener('click', () => selectItem(i));
+      list.appendChild(el);
+    });
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function setActive(index) {
+    const list = document.getElementById('mc-cp-results');
+    if (!list) return;
+    const items = list.querySelectorAll('.mc-cp-item');
+    items.forEach((el, i) => {
+      const isActive = i === index;
+      el.classList.toggle('mc-cp-active', isActive);
+      el.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    activeIndex = index;
+    const activeEl = items[index];
+    if (activeEl) {
+      activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  function selectItem(index) {
+    const item = currentItems[index];
+    if (!item) return;
+    close();
+    // Small delay so close animation can start before navigation
+    setTimeout(() => {
+      if (typeof item.action === 'function') {
+        item.action();
+      }
+    }, 80);
+  }
+
+  /* ─── Open / Close ─────────────────────────────────────────────────── */
+  function open() {
+    if (isOpen) return;
+    isOpen = true;
+
+    buildDOM();
+    const overlay = document.getElementById('mc-cp-overlay');
+    const input   = document.getElementById('mc-cp-input');
+    if (!overlay || !input) return;
+
+    // Render all items (no filter) on open
+    renderItems(buildItems(''));
+
+    overlay.style.display = 'flex';
+    // Force reflow for transition
+    overlay.getBoundingClientRect();
+    overlay.classList.add('mc-cp-visible');
+
+    input.value = '';
+    setTimeout(() => input.focus(), 60);
+  }
+
+  function close() {
+    if (!isOpen) return;
+    isOpen = false;
+
+    const overlay = document.getElementById('mc-cp-overlay');
+    if (!overlay) return;
+
+    overlay.classList.remove('mc-cp-visible');
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      const input = document.getElementById('mc-cp-input');
+      if (input) input.value = '';
+    }, 160);
+  }
+
+  /* ─── Event binding ───────────────────────────────────────────────── */
+  function bindEvents(overlay) {
+    const input = document.getElementById('mc-cp-input');
+    const palette = document.getElementById('mc-cp-palette');
+
+    // Close on overlay click (outside palette)
+    overlay.addEventListener('mousedown', e => {
+      if (palette && !palette.contains(e.target)) {
+        close();
+      }
+    });
+
+    // Live search
+    input.addEventListener('input', () => {
+      renderItems(buildItems(input.value));
+    });
+
+    // Keyboard navigation inside the palette
+    input.addEventListener('keydown', e => {
+      const count = currentItems.length;
+      if (count === 0) {
+        if (e.key === 'Escape') { e.preventDefault(); close(); }
+        return;
+      }
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setActive((activeIndex + 1) % count);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setActive((activeIndex - 1 + count) % count);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          selectItem(activeIndex);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          close();
+          break;
+      }
+    });
+  }
+
+  /* ─── Global keyboard shortcut ──────────────────────────────────────── */
+  function handleGlobalKey(e) {
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const mod   = isMac ? e.metaKey : e.ctrlKey;
+    if (mod && e.key === 'k') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isOpen) {
+        close();
+      } else {
+        open();
+      }
+    }
+  }
+
+  // Use capture phase so we intercept before the SPA
+  document.addEventListener('keydown', handleGlobalKey, true);
+
+  /* ─── Wait for Vuex store ──────────────────────────────────────────── */
+  function waitForStore(maxMs, intervalMs) {
+    const deadline = Date.now() + maxMs;
+    const timer = setInterval(() => {
+      const vue = window.__vue__;
+      const store = vue?.$store;
+      if (store) {
+        storeRef = store;
+        clearInterval(timer);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        clearInterval(timer);
+        // Palette still works without store (only static routes available)
+      }
+    }, intervalMs);
+  }
+
+  waitForStore(3000, 200);
+
+  /* ─── MutationObserver — re-ensure shortcut persists ────────────────── */
+  // The keydown listener is on document so it naturally survives SPA
+  // navigation, but we watch for DOM resets that might recreate document:
+  const observer = new MutationObserver(() => {
+    // Rebuild DOM if palette was removed (e.g. full re-render)
+    if (isOpen && !document.getElementById('mc-cp-overlay')) {
+      isOpen = false;
+      open();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: false });
+
+  /* ─── Inject styles immediately ──────────────────────────────────────── */
+  injectStyles();
+
+})();
+</script>
