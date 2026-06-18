@@ -730,14 +730,19 @@
     window.addEventListener('hashchange',        onRouteChange);
 
     // MutationObserver: catches Vue-driven DOM changes that may indicate route change
+    // Debounced to avoid excessive evaluations on busy SPA re-renders
+    let navDebounce = null;
     const navObserver = new MutationObserver(() => {
-      // Only re-evaluate if the URL has changed since last check
-      const parsed = parseConversationFromURL();
-      const newId  = parsed ? `${parsed.accountId}/${parsed.convId}` : null;
-      const curId  = currentAccountId ? `${currentAccountId}/${currentConvId}` : null;
-      if (newId !== curId) {
-        onRouteChange();
-      }
+      if (navDebounce) return;
+      navDebounce = setTimeout(() => {
+        navDebounce = null;
+        const parsed = parseConversationFromURL();
+        const newId  = parsed ? `${parsed.accountId}/${parsed.convId}` : null;
+        const curId  = currentAccountId ? `${currentAccountId}/${currentConvId}` : null;
+        if (newId !== curId) {
+          onRouteChange();
+        }
+      }, 150);
     });
 
     navObserver.observe(document.body, {

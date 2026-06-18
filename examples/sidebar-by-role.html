@@ -114,8 +114,8 @@
     style.id = FALLBACK_STYLE_ID;
     // Oculta Relatórios e Configurações por href até o perfil ser conhecido
     style.textContent = [
-      'a[href*="/reports"] { display: none !important; }',
-      'a[href*="/settings"] { display: none !important; }',
+      'a[href*="/reports"], li:has(> a[href*="/reports"]) { display: none !important; }',
+      'a[href*="/settings"], li:has(> a[href*="/settings"]) { display: none !important; }',
     ].join('\n');
     document.head.appendChild(style);
   }
